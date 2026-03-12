@@ -34,7 +34,7 @@ pip install --upgrade git+https://github.com/GinkgoDatapoints/vcpi-package.git
 
 ### Getting a token
 
-Generate your personal access token at **[thevirtualcell.com](https://thevirtualcell.com)**. Once logged in, navigate to your account settings to create one.
+Generate your personal access token at **[thevirtualcell.com/dashboard](https://thevirtualcell.com/dashboard)** — click the Settings icon to find your token.
 
 ### Setting your token
 
@@ -46,14 +46,14 @@ export TVC_TOKEN="your-token-here"
 
 Add this to your `.bashrc`, `.zshrc`, or shell profile so it's set automatically on every session.
 
-**Option 2 — system keyring**
+**Option 2 — interactive login (stores in system keyring)**
 
 ```python
-import keyring
-keyring.set_password("vcpi-client", "TVC_TOKEN", "your-token-here")
+import vcpi
+vcpi.login()
 ```
 
-Once stored, `import vcpi` will pick it up automatically with no further configuration.
+This prompts for your token and saves it to your system keychain. Once stored, all future `vcpi` calls pick it up automatically — you only need to do this once.
 
 ---
 
@@ -555,7 +555,7 @@ combined = pl.concat([
 Your token isn't set. Run `export TVC_TOKEN="your-token"` or store it in the keyring (see Authentication above).
 
 **`401 Unauthorized`**
-Your token is set but invalid or expired. Generate a new one at [thevirtualcell.com](https://thevirtualcell.com).
+Your token is set but invalid or expired. Generate a new one at [thevirtualcell.com/dashboard](https://thevirtualcell.com/dashboard) (open Settings).
 
 **`load_experiment()` is slow**
 The gene expression matrix is large (~400MB). Download time depends on your network connection. The progress bar shows live download speed — typical times are 20–60 seconds on a good connection.
