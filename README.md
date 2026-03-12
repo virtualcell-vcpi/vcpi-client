@@ -112,6 +112,20 @@ chem = exp["chemistry"]  # compound chemistry
 
 ## API Reference
 
+### `login(token=None)`
+
+Validate and store your API key in the system keychain. If a valid key is already stored, prints "Already logged in." and returns immediately.
+
+```python
+# Interactive — prompts for your API key
+vcpi.login()
+
+# Or pass it directly
+vcpi.login("your-api-key")
+```
+
+---
+
 ### `list_datasets()`
 
 Returns a Polars DataFrame of all datasets the authenticated user can access.
@@ -203,12 +217,22 @@ print(schemas["chemistry"]["column_name"].to_list())
 
 ---
 
+### `load_dataset(job_id)`
+
+Download the full sequencing parquet for a single experiment. For most use cases, prefer `load_experiment()` which also fetches metadata and chemistry.
+
+```python
+df = vcpi.load_dataset("tvc-pgg-001")
+```
+
+---
+
 ### `load_metadata(job_id)`
 
 Fetch the experimental metadata CSV for a job as a Polars DataFrame.
 
 ```python
-meta = vcpi.load_metadata("abc-123")
+meta = vcpi.load_metadata("tvc-pgg-001")
 print(meta)
 ```
 
@@ -219,7 +243,7 @@ print(meta)
 Fetch compound chemistry data (SMILES, purity, molecular weight, logP, TPSA) for a job.
 
 ```python
-chem = vcpi.load_chem("abc-123")
+chem = vcpi.load_chem("tvc-pgg-001")
 print(chem)
 # columns: compound, user_compound_id, smiles, purity_pct,
 #          molecular_weight, log_p, tpsa
@@ -234,7 +258,7 @@ Returns an empty DataFrame with the correct schema if no chemistry exists for th
 Convenience function that downloads sequencing data, metadata, and chemistry in one call. Metadata and chemistry are fetched concurrently after the main download completes.
 
 ```python
-exp = vcpi.load_experiment("abc-123")
+exp = vcpi.load_experiment("tvc-pgg-001")
 
 exp["data"]      # Polars DataFrame — full sequencing data
 exp["metadata"]  # Polars DataFrame — experimental metadata
