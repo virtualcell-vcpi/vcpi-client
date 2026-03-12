@@ -606,6 +606,30 @@ The default stream timeout is 5 minutes. For very slow connections this may not 
 
 ---
 
+## Testing
+
+```bash
+# Install test dependencies
+pip install -e ".[test]"
+
+# Run unit tests (no network, no token needed)
+pytest tests/
+
+# Integration tests run automatically if you've done vcpi.login()
+# (token is picked up from your system keyring)
+
+# Or set TVC_TOKEN explicitly
+TVC_TOKEN=your-token pytest tests/
+
+# Run only integration tests
+pytest -m integration
+
+# Run only unit tests
+pytest -m "not integration"
+```
+
+---
+
 ## License
 
 MIT © Ginkgo Datapoints
