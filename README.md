@@ -34,7 +34,7 @@ pip install --upgrade git+https://github.com/GinkgoDatapoints/vcpi-package.git
 
 ### Getting a token
 
-Generate your personal access token at **[thevirtualcell.com](https://thevirtualcell.com)**. Once logged in, navigate to your account settings to create one.
+Generate your personal access token at **[thevirtualcell.com/dashboard](https://thevirtualcell.com/dashboard)** — click the Settings icon to find your token.
 
 ### Setting your token
 
@@ -46,14 +46,14 @@ export TVC_TOKEN="your-token-here"
 
 Add this to your `.bashrc`, `.zshrc`, or shell profile so it's set automatically on every session.
 
-**Option 2 — system keyring**
+**Option 2 — interactive login (stores in system keyring)**
 
 ```python
-import keyring
-keyring.set_password("vcpi-client", "TVC_TOKEN", "your-token-here")
+import vcpi
+vcpi.login()
 ```
 
-Once stored, `import vcpi` will pick it up automatically with no further configuration.
+This prompts for your token and saves it to your system keychain. Once stored, all future `vcpi` calls pick it up automatically — you only need to do this once.
 
 ---
 
@@ -83,7 +83,7 @@ print(datasets)
 # 2. Query metadata and chemistry without downloading anything
 df = vcpi.query(
     job_id="your-job-id",
-    sql="SELECT * FROM metadata WHERE percent_mitochondrial < 0.2"
+    sql="SELECT * FROM metadata WHERE percent_mitochondrial < 20 LIMIT 5"
 )
 
 # 3. Download the full experiment when you need gene expression data
@@ -111,6 +111,20 @@ chem = exp["chemistry"]  # compound chemistry
 ---
 
 ## API Reference
+
+### `login(token=None)`
+
+Validate and store your API key in the system keychain. If a valid key is already stored, prints "Already logged in." and returns immediately.
+
+```python
+# Interactive — prompts for your API key
+vcpi.login()
+
+# Or pass it directly
+vcpi.login("your-api-key")
+```
+
+---
 
 ### `list_datasets()`
 
@@ -145,15 +159,16 @@ df = vcpi.query(
     sql="""
         SELECT sequenced_id, user_compound_id, percent_mitochondrial
         FROM metadata
-        WHERE percent_mitochondrial < 0.2
+        WHERE percent_mitochondrial < 20
           AND is_control = false
+        LIMIT 5
     """
 )
 
 # Browse compounds
 df = vcpi.query(
     job_id="tvc-pgg-001",
-    sql="SELECT * FROM chemistry WHERE log_p < 3 AND molecular_weight < 500"
+    sql="SELECT * FROM chemistry WHERE log_p < 3 AND molecular_weight < 500 LIMIT 5"
 )
 
 # Join metadata with chemistry
@@ -166,6 +181,7 @@ df = vcpi.query(
         JOIN   chemistry c ON c.compound = m.compound
         WHERE  m.cell_line = 'THP-1'
         ORDER  BY m.compound_concentration DESC
+        LIMIT 5
     """
 )
 
@@ -201,12 +217,22 @@ print(schemas["chemistry"]["column_name"].to_list())
 
 ---
 
+### `load_dataset(job_id)`
+
+Download the full sequencing parquet for a single experiment. For most use cases, prefer `load_experiment()` which also fetches metadata and chemistry.
+
+```python
+df = vcpi.load_dataset("tvc-pgg-001")
+```
+
+---
+
 ### `load_metadata(job_id)`
 
 Fetch the experimental metadata CSV for a job as a Polars DataFrame.
 
 ```python
-meta = vcpi.load_metadata("abc-123")
+meta = vcpi.load_metadata("tvc-pgg-001")
 print(meta)
 ```
 
@@ -217,7 +243,7 @@ print(meta)
 Fetch compound chemistry data (SMILES, purity, molecular weight, logP, TPSA) for a job.
 
 ```python
-chem = vcpi.load_chem("abc-123")
+chem = vcpi.load_chem("tvc-pgg-001")
 print(chem)
 # columns: compound, user_compound_id, smiles, purity_pct,
 #          molecular_weight, log_p, tpsa
@@ -232,7 +258,7 @@ Returns an empty DataFrame with the correct schema if no chemistry exists for th
 Convenience function that downloads sequencing data, metadata, and chemistry in one call. Metadata and chemistry are fetched concurrently after the main download completes.
 
 ```python
-exp = vcpi.load_experiment("abc-123")
+exp = vcpi.load_experiment("tvc-pgg-001")
 
 exp["data"]      # Polars DataFrame — full sequencing data
 exp["metadata"]  # Polars DataFrame — experimental metadata
@@ -270,7 +296,7 @@ vcpi.query("tvc-pgg-001", "SELECT * FROM metadata LIMIT 10")
 vcpi.query("tvc-pgg-001", """
     SELECT COUNT(*) AS n_samples
     FROM metadata
-    WHERE percent_mitochondrial < 0.2
+    WHERE percent_mitochondrial < 20
 """)
 exp = vcpi.load_experiment("tvc-pgg-001")
 ```
@@ -297,7 +323,7 @@ controls = vcpi.query(
                total_sequenced_reads
         FROM   metadata
         WHERE  is_control = true
-          AND  percent_mitochondrial < 0.15
+          AND  percent_mitochondrial < 15
     """
 )
 controls.write_csv("control_samples_qc.csv")
@@ -327,7 +353,7 @@ job_id <- datasets$job_id[[1]]
 # Query metadata — instant, no download
 df <- polars_to_r(vcpi$query(
   job_id = job_id,
-  sql    = "SELECT * FROM metadata WHERE percent_mitochondrial < 0.2 LIMIT 100"
+  sql    = "SELECT * FROM metadata WHERE percent_mitochondrial < 20 LIMIT 100"
 ))
 
 # Download the full experiment
@@ -379,7 +405,7 @@ One row per sample. Links to sequencing columns via `sequenced_id`. Contains exp
 | `timepoint` | e.g. `"24h"` |
 | `is_control` | Boolean |
 | `total_sequenced_reads` | QC metric |
-| `percent_mitochondrial` | QC metric — use to filter low-quality samples |
+| `percent_mitochondrial` | QC metric (0–100 scale) — use to filter low-quality samples |
 | `percent_mapped` | QC metric |
 | `percent_duplicated` | QC metric |
 | `ngenes3` | Number of genes with ≥ 3 counts |
@@ -437,7 +463,8 @@ df = vcpi.query(
         FROM   metadata
         WHERE  cell_line = 'THP-1'
           AND  timepoint = '24h'
-          AND  percent_mitochondrial < 0.2
+          AND  percent_mitochondrial < 20
+        LIMIT 5
     """
 )
 
@@ -450,6 +477,7 @@ df = vcpi.query(
         WHERE  log_p BETWEEN 0 AND 5
           AND  molecular_weight < 500
           AND  tpsa < 140
+        LIMIT 5
     """
 )
 
@@ -464,6 +492,7 @@ df = vcpi.query(
         JOIN   chemistry c ON c.compound = m.compound
         WHERE  m.is_control = false
         ORDER  BY m.compound_concentration DESC
+        LIMIT 5
     """
 )
 
@@ -555,7 +584,7 @@ combined = pl.concat([
 Your token isn't set. Run `export TVC_TOKEN="your-token"` or store it in the keyring (see Authentication above).
 
 **`401 Unauthorized`**
-Your token is set but invalid or expired. Generate a new one at [thevirtualcell.com](https://thevirtualcell.com).
+Your token is set but invalid or expired. Generate a new one at [thevirtualcell.com/dashboard](https://thevirtualcell.com/dashboard) (open Settings).
 
 **`load_experiment()` is slow**
 The gene expression matrix is large (~400MB). Download time depends on your network connection. The progress bar shows live download speed — typical times are 20–60 seconds on a good connection.
@@ -574,6 +603,30 @@ The default stream timeout is 5 minutes. For very slow connections this may not 
 | `httpx` | HTTP client for streaming downloads |
 | `keyring` | Secure token storage |
 | `tqdm` | Download progress bar |
+
+---
+
+## Testing
+
+```bash
+# Install test dependencies
+pip install -e ".[test]"
+
+# Run unit tests (no network, no token needed)
+pytest tests/
+
+# Integration tests run automatically if you've done vcpi.login()
+# (token is picked up from your system keyring)
+
+# Or set TVC_TOKEN explicitly
+TVC_TOKEN=your-token pytest tests/
+
+# Run only integration tests
+pytest -m integration
+
+# Run only unit tests
+pytest -m "not integration"
+```
 
 ---
 

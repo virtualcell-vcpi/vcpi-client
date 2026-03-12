@@ -18,5 +18,16 @@ dependencies = [
     "tqdm>=4.67.3",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "respx",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: hits the real API (requires TVC_TOKEN)",
+]

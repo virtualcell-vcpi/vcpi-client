@@ -79,6 +79,11 @@ EMPTY_CHEM_DF = pl.DataFrame(
 _cached_token: Optional[str] = None
 
 
+def _clear_token_cache() -> None:
+    global _cached_token
+    _cached_token = None
+
+
 def _get_token() -> str:
     """Retrieve the bearer token, caching it for the lifetime of the process."""
     global _cached_token
@@ -329,6 +334,11 @@ def query(
                 params={"job_id": job_id},
                 headers=_headers(),
             )
+            if resp.status_code == 404:
+                raise ValueError(
+                    f"Dataset not found for job_id={job_id!r}. "
+                    "Run vcpi.list_datasets() to see available datasets."
+                )
             resp.raise_for_status()
             manifest = [resp.json()]
         else:
