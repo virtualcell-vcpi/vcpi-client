@@ -32,6 +32,8 @@ def login(token: str = None):
     if not active_token:
         existing = keyring.get_password("vcpi-client", "TVC_TOKEN")
         if existing and _validate_token(existing):
+            os.environ["TVC_TOKEN"] = existing
+            _clear_token_cache()
             print("Already logged in.")
             return
         print("Authentication required.")
@@ -51,6 +53,7 @@ def login(token: str = None):
         return
 
     keyring.set_password("vcpi-client", "TVC_TOKEN", active_token)
+    os.environ["TVC_TOKEN"] = active_token
     _clear_token_cache()
     print("\n" + "=" * 30)
     print("LOGIN SUCCESSFUL")
