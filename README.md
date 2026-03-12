@@ -83,7 +83,7 @@ print(datasets)
 # 2. Query metadata and chemistry without downloading anything
 df = vcpi.query(
     job_id="your-job-id",
-    sql="SELECT * FROM metadata WHERE percent_mitochondrial < 0.2"
+    sql="SELECT * FROM metadata WHERE percent_mitochondrial < 20 LIMIT 5"
 )
 
 # 3. Download the full experiment when you need gene expression data
@@ -145,15 +145,16 @@ df = vcpi.query(
     sql="""
         SELECT sequenced_id, user_compound_id, percent_mitochondrial
         FROM metadata
-        WHERE percent_mitochondrial < 0.2
+        WHERE percent_mitochondrial < 20
           AND is_control = false
+        LIMIT 5
     """
 )
 
 # Browse compounds
 df = vcpi.query(
     job_id="tvc-pgg-001",
-    sql="SELECT * FROM chemistry WHERE log_p < 3 AND molecular_weight < 500"
+    sql="SELECT * FROM chemistry WHERE log_p < 3 AND molecular_weight < 500 LIMIT 5"
 )
 
 # Join metadata with chemistry
@@ -166,6 +167,7 @@ df = vcpi.query(
         JOIN   chemistry c ON c.compound = m.compound
         WHERE  m.cell_line = 'THP-1'
         ORDER  BY m.compound_concentration DESC
+        LIMIT 5
     """
 )
 
@@ -270,7 +272,7 @@ vcpi.query("tvc-pgg-001", "SELECT * FROM metadata LIMIT 10")
 vcpi.query("tvc-pgg-001", """
     SELECT COUNT(*) AS n_samples
     FROM metadata
-    WHERE percent_mitochondrial < 0.2
+    WHERE percent_mitochondrial < 20
 """)
 exp = vcpi.load_experiment("tvc-pgg-001")
 ```
@@ -297,7 +299,7 @@ controls = vcpi.query(
                total_sequenced_reads
         FROM   metadata
         WHERE  is_control = true
-          AND  percent_mitochondrial < 0.15
+          AND  percent_mitochondrial < 15
     """
 )
 controls.write_csv("control_samples_qc.csv")
@@ -327,7 +329,7 @@ job_id <- datasets$job_id[[1]]
 # Query metadata — instant, no download
 df <- polars_to_r(vcpi$query(
   job_id = job_id,
-  sql    = "SELECT * FROM metadata WHERE percent_mitochondrial < 0.2 LIMIT 100"
+  sql    = "SELECT * FROM metadata WHERE percent_mitochondrial < 20 LIMIT 100"
 ))
 
 # Download the full experiment
@@ -379,7 +381,7 @@ One row per sample. Links to sequencing columns via `sequenced_id`. Contains exp
 | `timepoint` | e.g. `"24h"` |
 | `is_control` | Boolean |
 | `total_sequenced_reads` | QC metric |
-| `percent_mitochondrial` | QC metric — use to filter low-quality samples |
+| `percent_mitochondrial` | QC metric (0–100 scale) — use to filter low-quality samples |
 | `percent_mapped` | QC metric |
 | `percent_duplicated` | QC metric |
 | `ngenes3` | Number of genes with ≥ 3 counts |
@@ -437,7 +439,8 @@ df = vcpi.query(
         FROM   metadata
         WHERE  cell_line = 'THP-1'
           AND  timepoint = '24h'
-          AND  percent_mitochondrial < 0.2
+          AND  percent_mitochondrial < 20
+        LIMIT 5
     """
 )
 
@@ -450,6 +453,7 @@ df = vcpi.query(
         WHERE  log_p BETWEEN 0 AND 5
           AND  molecular_weight < 500
           AND  tpsa < 140
+        LIMIT 5
     """
 )
 
@@ -464,6 +468,7 @@ df = vcpi.query(
         JOIN   chemistry c ON c.compound = m.compound
         WHERE  m.is_control = false
         ORDER  BY m.compound_concentration DESC
+        LIMIT 5
     """
 )
 
