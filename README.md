@@ -240,13 +240,15 @@ print(meta)
 
 ### `load_chem(job_id)`
 
-Fetch compound chemistry data (SMILES, purity, molecular weight, logP, TPSA) for a job.
+Fetch compound chemistry data for a job. All molecular properties are computed via RDKit.
 
 ```python
 chem = vcpi.load_chem("tvc-pgg-001")
 print(chem)
 # columns: compound, user_compound_id, smiles, purity_pct,
-#          molecular_weight, log_p, tpsa
+#          molecular_weight, log_p, tpsa, inchi_key,
+#          num_rotatable_bonds, num_h_acceptors, num_h_donors,
+#          num_atoms, num_bonds
 ```
 
 Returns an empty DataFrame with the correct schema if no chemistry exists for the job.
@@ -413,17 +415,23 @@ One row per sample. Links to sequencing columns via `sequenced_id`. Contains exp
 
 ### Chemistry (`load_chem`)
 
-One row per compound. Links to metadata via the `compound` UUID.
+One row per compound. Links to metadata via the `compound` UUID. All molecular properties are computed via RDKit.
 
 | Column | Description |
 |---|---|
 | `compound` | UUID — joins to `metadata.compound` |
-| `user_compound_id` | Human-readable name |
-| `smiles` | SMILES string |
-| `molecular_weight` | g/mol |
-| `log_p` | Calculated logP |
-| `tpsa` | Topological polar surface area |
-| `purity_pct` | Compound purity |
+| `user_compound_id` | User assigned name, sometimes human-readable|
+| `smiles` | Canonical SMILES string |
+| `purity_pct` | Compound purity (%) |
+| `molecular_weight` | Molecular weight (g/mol) |
+| `log_p` | Calculated partition coefficient (cLogP) |
+| `tpsa` | Topological polar surface area (Å²) |
+| `inchi_key` | InChI key for compound lookup |
+| `num_rotatable_bonds` | Number of rotatable bonds |
+| `num_h_acceptors` | Number of hydrogen bond acceptors |
+| `num_h_donors` | Number of hydrogen bond donors |
+| `num_atoms` | Total atom count |
+| `num_bonds` | Total bond count |
 
 ### How the three tables relate
 
@@ -468,15 +476,17 @@ df = vcpi.query(
     """
 )
 
-# Compounds with drug-like properties (Lipinski)
+# Compounds with drug-like properties (Lipinski rule of 5)
 df = vcpi.query(
     job_id="tvc-pgg-001",
     sql="""
-        SELECT user_compound_id, molecular_weight, log_p, tpsa
+        SELECT user_compound_id, molecular_weight, log_p, tpsa,
+               num_h_acceptors, num_h_donors, num_rotatable_bonds
         FROM   chemistry
         WHERE  log_p BETWEEN 0 AND 5
           AND  molecular_weight < 500
-          AND  tpsa < 140
+          AND  num_h_acceptors <= 10
+          AND  num_h_donors <= 5
         LIMIT 5
     """
 )
