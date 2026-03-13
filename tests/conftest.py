@@ -47,6 +47,12 @@ SAMPLE_COMPOUNDS_JSON = {
             "molecular_weight": 384.24,
             "log_p": 0.36,
             "tpsa": 124.44,
+            "inchi_key": "GXJABQQUPOEQRB-UHFFFAOYSA-N",
+            "num_rotatable_bonds": 10,
+            "num_h_acceptors": 5,
+            "num_h_donors": 4,
+            "num_atoms": 27,
+            "num_bonds": 28,
         }
     ]
 }
