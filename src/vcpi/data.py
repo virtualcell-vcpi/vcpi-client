@@ -62,15 +62,22 @@ TIMEOUT_STREAM    = 300.0  # full parquet download
 
 # ---------------------------------------------------------------------------
 # Shared empty chemistry schema — defined once, reused everywhere
+# All molecular properties computed via RDKit
 # ---------------------------------------------------------------------------
 EMPTY_CHEM_DF = pl.DataFrame(
-    {"compound":         pl.Series([], dtype=pl.Utf8),
-     "user_compound_id": pl.Series([], dtype=pl.Utf8),
-     "smiles":           pl.Series([], dtype=pl.Utf8),
-     "purity_pct":       pl.Series([], dtype=pl.Float64),
-     "molecular_weight": pl.Series([], dtype=pl.Float64),
-     "log_p":            pl.Series([], dtype=pl.Float64),
-     "tpsa":             pl.Series([], dtype=pl.Float64)}
+    {"compound":            pl.Series([], dtype=pl.Utf8),
+     "user_compound_id":    pl.Series([], dtype=pl.Utf8),
+     "smiles":              pl.Series([], dtype=pl.Utf8),
+     "purity_pct":          pl.Series([], dtype=pl.Float64),
+     "molecular_weight":    pl.Series([], dtype=pl.Float64),
+     "log_p":               pl.Series([], dtype=pl.Float64),
+     "tpsa":                pl.Series([], dtype=pl.Float64),
+     "inchi_key":           pl.Series([], dtype=pl.Utf8),
+     "num_rotatable_bonds": pl.Series([], dtype=pl.Int64),
+     "num_h_acceptors":     pl.Series([], dtype=pl.Int64),
+     "num_h_donors":        pl.Series([], dtype=pl.Int64),
+     "num_atoms":           pl.Series([], dtype=pl.Int64),
+     "num_bonds":           pl.Series([], dtype=pl.Int64)}
 )
 
 # ---------------------------------------------------------------------------
@@ -252,10 +259,12 @@ def load_metadata(job_id: str) -> pl.DataFrame:
 
 def load_chem(job_id: str) -> pl.DataFrame:
     """
-    Fetch compound chemistry data (SMILES, common names) for a single job.
+    Fetch compound chemistry data for a single job.
 
     Returns an empty DataFrame with the correct schema when no chemistry
     data exists for the given ``job_id`` (HTTP 404).
+
+    All molecular properties are computed via RDKit.
 
     Parameters
     ----------
@@ -265,7 +274,10 @@ def load_chem(job_id: str) -> pl.DataFrame:
     Returns
     -------
     pl.DataFrame
-        Columns: ``compound``, ``smiles``, ``common_name``.
+        Columns: ``compound``, ``user_compound_id``, ``smiles``,
+        ``purity_pct``, ``molecular_weight``, ``log_p``, ``tpsa``,
+        ``inchi_key``, ``num_rotatable_bonds``, ``num_h_acceptors``,
+        ``num_h_donors``, ``num_atoms``, ``num_bonds``.
     """
     with httpx.Client(timeout=TIMEOUT_METADATA) as client:
         resp = client.get(
@@ -304,9 +316,12 @@ def query(
         ``total_sequenced_reads``, and ~20 other QC / experimental fields.
 
     **chemistry**
-        One row per compound. Columns: ``compound``, ``user_compound_id``,
-        ``smiles``, ``molecular_weight``, ``log_p``, ``tpsa``,
-        ``purity_pct``.  Join to metadata on ``compound``.
+        One row per compound. Molecular properties computed via RDKit.
+        Columns: ``compound``, ``user_compound_id``, ``smiles``,
+        ``purity_pct``, ``molecular_weight``, ``log_p``, ``tpsa``,
+        ``inchi_key``, ``num_rotatable_bonds``, ``num_h_acceptors``,
+        ``num_h_donors``, ``num_atoms``, ``num_bonds``.
+        Join to metadata on ``compound``.
 
     Parameters
     ----------
