@@ -88,7 +88,7 @@ df = vcpi.query(
 
 # 3. Download the full experiment when you need gene expression data
 exp = vcpi.load_experiment("your-job-id")
-seq  = exp["data"]       # gene expression matrix
+seq  = exp["data"]       # gene expression matrix (rows = gene_id, GENCODE v48)
 meta = exp["metadata"]   # sample metadata
 chem = exp["chemistry"]  # compound chemistry
 ```
@@ -375,21 +375,21 @@ Every experiment on the VCPI platform consists of three linked tables that are a
 
 ### Sequencing (`load_experiment` → `exp["data"]`)
 
-A **wide-format gene expression matrix**. Rows are genes, columns are samples identified by `sequenced_id`.
+A **wide-format gene expression matrix**. Rows are Ensembl gene IDs from GENCODE v48, columns are samples identified by `sequenced_id`.
 
 ```
-shape: (~20,000 genes × ~11,811 columns)
+shape: (~60,000 genes × ~11,811 columns)
 
-┌──────────┬───────────┬───────────┬─────┬──────────┐
-│ gene     │ 101160268 │ 101160269 │ … │ job_id   │
-│ str      │ f64       │ f64       │   │ str      │
-╞══════════╪═══════════╪═══════════╪═════╪══════════╡
-│ BRCA1    │ 0.0       │ 12.4      │ … │ tvc-…    │
-│ TP53     │ 3.1       │ 0.0       │ … │ tvc-…    │
-└──────────┴───────────┴───────────┴─────┴──────────┘
+┌─────────────────────┬───────────┬───────────┬─────┬──────────┐
+│ gene_id             │ 101160268 │ 101160269 │ … │ job_id   │
+│ str                 │ f64       │ f64       │   │ str      │
+╞═════════════════════╪═══════════╪═══════════╪═════╪══════════╡
+│ ENSG00000223972     │ 0.0       │ 12.4      │ … │ tvc-…    │
+│ ENSG00000227232     │ 3.1       │ 0.0       │ … │ tvc-…    │
+└─────────────────────┴───────────┴───────────┴─────┴──────────┘
 ```
 
-Each numeric column is named by its `sequenced_id` — the same ID that links to the metadata table.
+Each numeric column is named by its `sequenced_id` — the same ID that links to the metadata table. Gene IDs (e.g., `ENSG00000223972`) are stable Ensembl identifiers from GENCODE v48.
 
 ### Metadata (`load_metadata`)
 
@@ -420,7 +420,7 @@ One row per compound. Links to metadata via the `compound` UUID. All molecular p
 | Column | Description |
 |---|---|
 | `compound` | UUID — joins to `metadata.compound` |
-| `user_compound_id` | User assigned name, sometimes human-readable|
+| `user_compound_id` | Human-readable name |
 | `smiles` | Canonical SMILES string |
 | `purity_pct` | Compound purity (%) |
 | `molecular_weight` | Molecular weight (g/mol) |
@@ -436,11 +436,11 @@ One row per compound. Links to metadata via the `compound` UUID. All molecular p
 ### How the three tables relate
 
 ```
-sequencing (wide)          metadata                  chemistry
-──────────────────         ──────────────────        ──────────────
-gene | 101160268 | …  ←──  sequenced_id | compound ──→ compound | smiles | …
-                           percent_mito | cell_line
-                           job_id       | timepoint
+sequencing (wide)               metadata                  chemistry
+───────────────────────         ──────────────────        ──────────────
+gene_id | 101160268 | …    ←──  sequenced_id | compound ──→ compound | smiles | …
+                                percent_mito | cell_line
+                                job_id       | timepoint
 ```
 
 The column names in the sequencing matrix are the `sequenced_id` values in metadata. Joining them requires **unpivoting** (melting) the wide matrix to long format first — see the examples below.
@@ -523,14 +523,14 @@ df = vcpi.query(
 
 ### Gene expression analysis (local, after download)
 
-Gene expression requires downloading the full experiment first. The wide matrix (genes × samples) is then filtered and unpivoted locally in Polars:
+Gene expression requires downloading the full experiment first. The wide matrix (gene_id × samples) is then filtered and unpivoted locally in Polars:
 
 ```python
 import vcpi
 import polars as pl
 
 exp  = vcpi.load_experiment("tvc-pgg-001")
-seq  = exp["data"]       # wide: genes × samples
+seq  = exp["data"]       # wide: gene_id × samples
 meta = exp["metadata"]   # one row per sample
 chem = exp["chemistry"]  # one row per compound
 
@@ -542,12 +542,12 @@ good_samples = meta.filter(
 )
 
 # 2. Select matching columns from the expression matrix
-keep_cols  = ["gene"] + good_samples["sequenced_id"].cast(pl.Utf8).to_list()
+keep_cols  = ["gene_id"] + good_samples["sequenced_id"].cast(pl.Utf8).to_list()
 seq_filtered = seq.select([c for c in keep_cols if c in seq.columns])
 
 # 3. Unpivot to long format
 seq_long = seq_filtered.unpivot(
-    index="gene",
+    index="gene_id",
     variable_name="sequenced_id",
     value_name="expression"
 ).with_columns(pl.col("sequenced_id").cast(pl.Int64))
@@ -568,10 +568,10 @@ print(result.head())
 exp1 = vcpi.load_experiment("tvc-pgg-001")
 exp2 = vcpi.load_experiment("tvc-pgg-002")
 
-def get_gene_long(exp, gene):
+def get_gene_long(exp, gene_id):
     seq  = exp["data"]
     meta = exp["metadata"]
-    row  = seq.filter(pl.col("gene") == gene).drop(["gene", "filename"])
+    row  = seq.filter(pl.col("gene_id") == gene_id).drop(["gene_id", "filename"])
     long = row.unpivot(variable_name="sequenced_id", value_name="expression")
     long = long.with_columns(pl.col("sequenced_id").cast(pl.Int64))
     return long.join(
@@ -580,9 +580,10 @@ def get_gene_long(exp, gene):
         on="sequenced_id"
     )
 
+# Example: TP53 = ENSG00000141510
 combined = pl.concat([
-    get_gene_long(exp1, "TP53"),
-    get_gene_long(exp2, "TP53"),
+    get_gene_long(exp1, "ENSG00000141510"),
+    get_gene_long(exp2, "ENSG00000141510"),
 ])
 ```
 
