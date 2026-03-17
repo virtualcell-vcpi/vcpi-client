@@ -400,7 +400,7 @@ One row per sample. Links to sequencing columns via `sequenced_id`. Contains exp
 | `sequenced_id` | Links to the column names in the sequencing matrix |
 | `job_id` | Experiment identifier |
 | `compound` | UUID linking to the chemistry table |
-| `user_compound_id` | Human-readable compound name (e.g. `"Bortezomib"`) |
+| `user_compound_id` | User-given compound identifier (e.g. `"Bortezomib"` or `compound-123`) |
 | `compound_concentration` | Treatment dose |
 | `compound_concentration_unit` | e.g. `"nM"` |
 | `cell_line` | e.g. `"THP-1"` |
@@ -420,7 +420,7 @@ One row per compound. Links to metadata via the `compound` UUID. All molecular p
 | Column | Description |
 |---|---|
 | `compound` | UUID — joins to `metadata.compound` |
-| `user_compound_id` | Human-readable name |
+| `user_compound_id` | User-given compound identifier (e.g. `"Bortezomib"` or `compound-123`) |
 | `smiles` | Canonical SMILES string |
 | `purity_pct` | Compound purity (%) |
 | `molecular_weight` | Molecular weight (g/mol) |
