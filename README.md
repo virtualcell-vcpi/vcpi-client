@@ -416,10 +416,10 @@ One row per sample. Links to sequencing columns via `sequenced_id`. Contains exp
 | `cell_line` | e.g. `"THP-1"` |
 | `timepoint` | e.g. `"24h"` |
 | `is_control` | Boolean |
-| `total_sequenced_reads` | QC metric |
-| `percent_mitochondrial` | QC metric (0–100 scale) — use to filter low-quality samples |
-| `percent_mapped` | QC metric |
-| `percent_duplicated` | QC metric |
+| `total_sequenced_reads` | Total reads attributed to sample |
+| `percent_mitochondrial` | Percent of UMIs attributed to mitochondrial RNA |
+| `percent_mapped` | Percent of UMIs mapped to the reference, calculated by dividing n_mapped by total_umi_count |
+| `percent_duplicated` | Percentage of reads that are UMI duplicates |
 | `ngenes3` | Number of genes with ≥ 3 counts |
 | … | 26 columns total |
 
