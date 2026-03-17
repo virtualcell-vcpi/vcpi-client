@@ -71,6 +71,16 @@ Early access datasets appear in `list_datasets()` automatically once your superu
 
 ---
 
+## Experimental Methods
+
+### Experimental Design
+Each experiment is performed in a 384-well format assay. THP-1 cells were seeded at 20,000 cells per well for 24h then treated with compounds for 24h before harvesting. All library compounds are tested in technical duplicates at six concentrations [0.03, 0.1, 0.3, 1, 3,10 uM]. DMSO is used as an inert control matching the 0.15% DMSO present in all compound treatments in 8 replicates per plate. Staurosporine is included as a cell death control at 10uM dose with 4 replicates per plate. Three additional transcriptional controls (Brefeldin A, Rigosertib, Trichostatin A) are included at 4 replicates per plate at 10uM dose. 
+
+### Feature Counts
+Gene-level UMI counts for each sample were obtained following rRNA removal (bbduk), STAR alignment (STAR) against hg38, deduplication using umi-tools, and counting with featureCounts. The counts are aggregated into a single parquet where the column gene_id (e.g. ENSG00000223972) is in the index and columns are sample IDs. These IDs are from GENCODE v48.
+
+---
+
 ## Quick Start
 
 ```python
