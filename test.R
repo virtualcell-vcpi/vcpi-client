@@ -179,7 +179,7 @@ cat("\n--- 5. load_metadata() ---\n")
 
 test_that("load_metadata() returns a non-empty data.frame or skips gracefully", {
   skip_if(is.null(FIRST_JOB_ID), "No job_id available")
-  
+
   result <- tryCatch(
     polars_to_r(vcpi$load_metadata(FIRST_JOB_ID)),
     error = function(e) {
@@ -190,7 +190,7 @@ test_that("load_metadata() returns a non-empty data.frame or skips gracefully", 
       stop(e)
     }
   )
-  
+
   expect_s3_class(result, "data.frame")
   expect_gt(nrow(result), 0L)
 })

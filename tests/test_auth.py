@@ -4,7 +4,6 @@ import os
 from unittest.mock import patch
 
 import httpx
-import pytest
 import respx
 
 from vcpi.auth import _validate_token, login
@@ -23,23 +22,17 @@ class TestValidateToken:
 
     @respx.mock
     def test_unauthorized_returns_false(self):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
-            return_value=httpx.Response(401)
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(return_value=httpx.Response(401))
         assert _validate_token("bad-token") is False
 
     @respx.mock
     def test_forbidden_returns_false(self):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
-            return_value=httpx.Response(403)
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(return_value=httpx.Response(403))
         assert _validate_token("bad-token") is False
 
     @respx.mock
     def test_network_error_returns_false(self):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
-            side_effect=httpx.ConnectError("connection refused")
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(side_effect=httpx.ConnectError("connection refused"))
         assert _validate_token("any-token") is False
 
 
@@ -67,9 +60,7 @@ class TestLogin:
 
     @respx.mock
     def test_explicit_token_invalid(self, mock_keyring, capsys):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
-            return_value=httpx.Response(401)
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(return_value=httpx.Response(401))
         login(token="revoked-token")
         out = capsys.readouterr().out
         assert "LOGIN FAILED" in out
@@ -77,7 +68,7 @@ class TestLogin:
 
     @respx.mock
     def test_prompts_when_no_keyring_token(self, mock_keyring, capsys):
-        route = respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
             return_value=httpx.Response(200, json={"datasets": []})
         )
         with patch("vcpi.auth.input", return_value="prompted-token"):
@@ -89,9 +80,7 @@ class TestLogin:
 
     @respx.mock
     def test_empty_prompt_shows_error(self, mock_keyring, capsys):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
-            return_value=httpx.Response(401)
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(return_value=httpx.Response(401))
         with patch("vcpi.auth.input", return_value=""):
             login()
         out = capsys.readouterr().out
@@ -110,9 +99,7 @@ class TestLogin:
                 return httpx.Response(401)
             return httpx.Response(200, json={"datasets": []})
 
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
-            side_effect=_mock_validate
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(side_effect=_mock_validate)
         with patch("vcpi.auth.input", return_value="fresh-token"):
             login()
         out = capsys.readouterr().out

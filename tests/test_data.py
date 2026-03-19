@@ -59,9 +59,8 @@ class TestGetToken:
         _get_token()
         _clear_token_cache()
         os.environ.pop("TVC_TOKEN")
-        with patch("vcpi.data.keyring.get_password", return_value=None):
-            with pytest.raises(PermissionError):
-                _get_token()
+        with patch("vcpi.data.keyring.get_password", return_value=None), pytest.raises(PermissionError):
+            _get_token()
 
 
 class TestHeaders:
@@ -101,9 +100,7 @@ class TestResolveDatasetUrl:
 
     @respx.mock
     def test_raises_when_no_url(self, set_token_env):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(
-            return_value=httpx.Response(200, json={"job_id": "x"})
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(return_value=httpx.Response(200, json={"job_id": "x"}))
         with pytest.raises(ValueError, match="No parquet URL"):
             resolve_dataset_url("x")
 
@@ -140,18 +137,14 @@ class TestLoadChem:
 
     @respx.mock
     def test_returns_empty_on_404(self, set_token_env):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(
-            return_value=httpx.Response(404)
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(return_value=httpx.Response(404))
         df = load_chem("nonexistent")
         assert df.shape[0] == 0
         assert df.columns == EMPTY_CHEM_DF.columns
 
     @respx.mock
     def test_returns_empty_on_500(self, set_token_env):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(
-            return_value=httpx.Response(500)
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(return_value=httpx.Response(500))
         df = load_chem("bad")
         assert df.shape[0] == 0
 
@@ -168,9 +161,7 @@ class TestLoadChem:
 class TestSafeLoadChem:
     @respx.mock
     def test_returns_empty_on_exception(self, set_token_env):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(
-            side_effect=httpx.ConnectError("boom")
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(side_effect=httpx.ConnectError("boom"))
         df = _safe_load_chem("fail")
         assert df.shape[0] == 0
         assert df.columns == EMPTY_CHEM_DF.columns
@@ -182,9 +173,7 @@ class TestSafeLoadChem:
 class TestQuery:
     @respx.mock
     def test_404_raises_valueerror(self, set_token_env):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(
-            return_value=httpx.Response(404)
-        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(return_value=httpx.Response(404))
         with pytest.raises(ValueError, match="Dataset not found"):
             query(job_id="bad-id")
 
@@ -210,9 +199,7 @@ class TestQuery:
     @respx.mock
     def test_collective_query(self, set_token_env):
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-authorized-urls").mock(
-            return_value=httpx.Response(
-                200, json=SAMPLE_LIST_AUTHORIZED_URLS_JSON
-            )
+            return_value=httpx.Response(200, json=SAMPLE_LIST_AUTHORIZED_URLS_JSON)
         )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/download-dataset-metadata").mock(
             return_value=httpx.Response(200, content=SAMPLE_METADATA_CSV)

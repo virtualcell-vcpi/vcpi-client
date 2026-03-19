@@ -1,8 +1,9 @@
 import os
-import keyring
-import httpx
 
-from .data import _clear_token_cache, SUPABASE_FUNCTIONS_URL, SUPABASE_KEY, TIMEOUT_METADATA
+import httpx
+import keyring
+
+from .data import SUPABASE_FUNCTIONS_URL, SUPABASE_KEY, TIMEOUT_METADATA, _clear_token_cache
 
 
 def _validate_token(token: str) -> bool:
@@ -39,7 +40,7 @@ def login(token: str = None):
         print("Authentication required.")
         print("Get your token at: https://thevirtualcell.com/dashboard (open Settings)")
         active_token = input("Enter API Key: ").strip()
-    
+
     if not active_token:
         print("Error: No token provided.")
         return
