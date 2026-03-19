@@ -20,22 +20,17 @@ Example:
 from __future__ import annotations
 
 import concurrent.futures
-import time
 import io
 import logging
 import os
 import sys
 import tempfile
-from typing import Optional
 
 import duckdb
 import httpx
 import keyring
 import polars as pl
 from tqdm import tqdm
-
-
-
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -56,34 +51,36 @@ SUPABASE_KEY: str = "sb_publishable_Q6Mr49QEXcc4cu64ebdArg_26DRBnuj"
 # ---------------------------------------------------------------------------
 # Timeouts (seconds)
 # ---------------------------------------------------------------------------
-TIMEOUT_METADATA  = 30.0   # lightweight metadata / chemistry calls
-TIMEOUT_DATASET   = 60.0   # single-dataset URL resolution
-TIMEOUT_STREAM    = 300.0  # full parquet download
+TIMEOUT_METADATA = 30.0  # lightweight metadata / chemistry calls
+TIMEOUT_DATASET = 60.0  # single-dataset URL resolution
+TIMEOUT_STREAM = 300.0  # full parquet download
 
 # ---------------------------------------------------------------------------
 # Shared empty chemistry schema — defined once, reused everywhere
 # All molecular properties computed via RDKit
 # ---------------------------------------------------------------------------
 EMPTY_CHEM_DF = pl.DataFrame(
-    {"compound":            pl.Series([], dtype=pl.Utf8),
-     "user_compound_id":    pl.Series([], dtype=pl.Utf8),
-     "smiles":              pl.Series([], dtype=pl.Utf8),
-     "purity_pct":          pl.Series([], dtype=pl.Float64),
-     "molecular_weight":    pl.Series([], dtype=pl.Float64),
-     "log_p":               pl.Series([], dtype=pl.Float64),
-     "tpsa":                pl.Series([], dtype=pl.Float64),
-     "inchi_key":           pl.Series([], dtype=pl.Utf8),
-     "num_rotatable_bonds": pl.Series([], dtype=pl.Int64),
-     "num_h_acceptors":     pl.Series([], dtype=pl.Int64),
-     "num_h_donors":        pl.Series([], dtype=pl.Int64),
-     "num_atoms":           pl.Series([], dtype=pl.Int64),
-     "num_bonds":           pl.Series([], dtype=pl.Int64)}
+    {
+        "compound": pl.Series([], dtype=pl.Utf8),
+        "user_compound_id": pl.Series([], dtype=pl.Utf8),
+        "smiles": pl.Series([], dtype=pl.Utf8),
+        "purity_pct": pl.Series([], dtype=pl.Float64),
+        "molecular_weight": pl.Series([], dtype=pl.Float64),
+        "log_p": pl.Series([], dtype=pl.Float64),
+        "tpsa": pl.Series([], dtype=pl.Float64),
+        "inchi_key": pl.Series([], dtype=pl.Utf8),
+        "num_rotatable_bonds": pl.Series([], dtype=pl.Int64),
+        "num_h_acceptors": pl.Series([], dtype=pl.Int64),
+        "num_h_donors": pl.Series([], dtype=pl.Int64),
+        "num_atoms": pl.Series([], dtype=pl.Int64),
+        "num_bonds": pl.Series([], dtype=pl.Int64),
+    }
 )
 
 # ---------------------------------------------------------------------------
 # Session-level token cache — avoids hitting keyring on every request
 # ---------------------------------------------------------------------------
-_cached_token: Optional[str] = None
+_cached_token: str | None = None
 
 
 def _clear_token_cache() -> None:
@@ -95,24 +92,18 @@ def _get_token() -> str:
     """Retrieve the bearer token, caching it for the lifetime of the process."""
     global _cached_token
     if not _cached_token:
-        _cached_token = (
-            os.environ.get("TVC_TOKEN")
-            or keyring.get_password("vcpi-client", "TVC_TOKEN")
-        )
+        _cached_token = os.environ.get("TVC_TOKEN") or keyring.get_password("vcpi-client", "TVC_TOKEN")
     if not _cached_token:
-        raise PermissionError(
-            "TVC_TOKEN not found. Please run vcpi.login() or set the "
-            "TVC_TOKEN environment variable."
-        )
+        raise PermissionError("TVC_TOKEN not found. Please run vcpi.login() or set the TVC_TOKEN environment variable.")
     return _cached_token
 
 
 def _headers() -> dict[str, str]:
     """Build authentication headers for every Edge Function request."""
     return {
-        "apikey":        SUPABASE_KEY,
+        "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {_get_token()}",
-        "Content-Type":  "application/json",
+        "Content-Type": "application/json",
     }
 
 
@@ -147,6 +138,7 @@ def _safe_load_chem(job_id: str) -> pl.DataFrame:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def list_datasets() -> pl.DataFrame:
     """
     List every dataset the authenticated user is authorised to access.
@@ -178,7 +170,7 @@ def resolve_dataset_url(job_id: str) -> str:
             headers=_headers(),
         )
         resp.raise_for_status()
-        data_url: Optional[str] = resp.json().get("parquet_url")
+        data_url: str | None = resp.json().get("parquet_url")
 
     if not data_url:
         raise ValueError(f"No parquet URL returned for job_id: {job_id!r}")
@@ -206,27 +198,26 @@ def load_dataset(job_id: str) -> pl.DataFrame:
     data_url = resolve_dataset_url(job_id)
     logger.info("Downloading dataset for %s", job_id)
 
-    with httpx.Client(timeout=TIMEOUT_STREAM) as client:
-        with client.stream("GET", data_url) as stream:
-            total = int(stream.headers.get("Content-Length", 0))
-            with (
-                tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp,
-                tqdm(
-                    total        = total,
-                    unit         = "B",
-                    unit_scale   = True,
-                    unit_divisor = 1024,
-                    desc         = f"Downloading {job_id[:8]}…",
-                    file         = sys.stderr,   # stderr bypasses reticulate buffering
-                    dynamic_ncols = True,
-                    miniters     = 1,
-                    smoothing    = 0.1,
-                ) as progress,
-            ):
-                tmp_path = tmp.name
-                for chunk in stream.iter_bytes(chunk_size=1024 * 256):
-                    tmp.write(chunk)
-                    progress.update(len(chunk))
+    with httpx.Client(timeout=TIMEOUT_STREAM) as client, client.stream("GET", data_url) as stream:
+        total = int(stream.headers.get("Content-Length", 0))
+        with (
+            tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp,
+            tqdm(
+                total=total,
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+                desc=f"Downloading {job_id[:8]}…",
+                file=sys.stderr,  # stderr bypasses reticulate buffering
+                dynamic_ncols=True,
+                miniters=1,
+                smoothing=0.1,
+            ) as progress,
+        ):
+            tmp_path = tmp.name
+            for chunk in stream.iter_bytes(chunk_size=1024 * 256):
+                tmp.write(chunk)
+                progress.update(len(chunk))
 
     try:
         return pl.read_parquet(tmp_path)
@@ -296,7 +287,7 @@ def load_chem(job_id: str) -> pl.DataFrame:
 
 
 def query(
-    job_id: Optional[str] = None,
+    job_id: str | None = None,
     sql: str = "SELECT * FROM metadata LIMIT 10",
 ) -> pl.DataFrame:
     """
@@ -351,8 +342,7 @@ def query(
             )
             if resp.status_code == 404:
                 raise ValueError(
-                    f"Dataset not found for job_id={job_id!r}. "
-                    "Run vcpi.list_datasets() to see available datasets."
+                    f"Dataset not found for job_id={job_id!r}. Run vcpi.list_datasets() to see available datasets."
                 )
             resp.raise_for_status()
             manifest = [resp.json()]
@@ -368,8 +358,7 @@ def query(
         logger.warning("query(): manifest is empty — returning empty DataFrame.")
         return pl.DataFrame()
 
-    parquet_urls = [m["parquet_url"] for m in manifest if m.get("parquet_url")]
-    job_ids      = [m["job_id"]      for m in manifest if m.get("job_id")]
+    job_ids = [m["job_id"] for m in manifest if m.get("job_id")]
 
     # ---------------------------------------------------------------------------
     # 2. Fetch metadata + chemistry concurrently — these are fast API calls
@@ -409,7 +398,7 @@ def query(
     # ---------------------------------------------------------------------------
     _tick("Building tables")
     con = _make_duckdb_con()
-    con.register("metadata",  meta_df)
+    con.register("metadata", meta_df)
     con.register("chemistry", chem_df)
 
     # sequencing is intentionally NOT registered as a queryable table.
@@ -426,7 +415,7 @@ def query(
     # 4. Run query in background thread; spinner on main thread via stderr
     # ---------------------------------------------------------------------------
     result: list = []
-    error:  list = []
+    error: list = []
 
     def _run() -> None:
         try:
@@ -452,7 +441,7 @@ def query(
     return result[0]
 
 
-def describe(job_id: Optional[str] = None) -> dict[str, pl.DataFrame]:
+def describe(job_id: str | None = None) -> dict[str, pl.DataFrame]:
     """
     Return the schema of the ``metadata`` and ``chemistry`` tables.
 
@@ -467,7 +456,7 @@ def describe(job_id: Optional[str] = None) -> dict[str, pl.DataFrame]:
         each containing a DataFrame of column names and types.
     """
     return {
-        "metadata":  query(job_id, "DESCRIBE metadata"),
+        "metadata": query(job_id, "DESCRIBE metadata"),
         "chemistry": query(job_id, "DESCRIBE chemistry"),
     }
 
@@ -509,12 +498,12 @@ def load_experiment(job_id: str) -> dict[str, pl.DataFrame | str]:
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         meta_future = pool.submit(_safe_load_metadata)
         chem_future = pool.submit(_safe_load_chem, job_id)
-        metadata  = meta_future.result()
+        metadata = meta_future.result()
         chemistry = chem_future.result()
 
     return {
-        "data":      dataset,
-        "metadata":  metadata,
+        "data": dataset,
+        "metadata": metadata,
         "chemistry": chemistry,
-        "job_id":    job_id,
+        "job_id": job_id,
     }
