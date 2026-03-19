@@ -6,6 +6,7 @@ Run with:  pytest -m integration
 
 from __future__ import annotations
 
+import contextlib
 import os
 
 import keyring
@@ -15,7 +16,10 @@ import pytest
 import vcpi
 from vcpi.data import EMPTY_CHEM_DF
 
-_token = os.environ.get("TVC_TOKEN") or keyring.get_password("vcpi-client", "TVC_TOKEN")
+_token = os.environ.get("TVC_TOKEN")
+if not _token:
+    with contextlib.suppress(Exception):
+        _token = keyring.get_password("vcpi-client", "TVC_TOKEN")
 if _token and not os.environ.get("TVC_TOKEN"):
     os.environ["TVC_TOKEN"] = _token
 
