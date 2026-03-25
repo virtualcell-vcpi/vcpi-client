@@ -92,12 +92,16 @@ print(datasets)
 
 # 2. Query metadata and chemistry without downloading anything
 df = vcpi.query(
-    job_id="your-job-id",
+    job="tvc-bhr-009",          # by job ID
+    sql="SELECT * FROM metadata WHERE percent_mitochondrial < 20 LIMIT 5"
+)
+df = vcpi.query(
+    job="vcpi-0001",            # or by human-readable name — either works
     sql="SELECT * FROM metadata WHERE percent_mitochondrial < 20 LIMIT 5"
 )
 
 # 3. Download the full experiment when you need gene expression data
-exp = vcpi.load_experiment("your-job-id")
+exp = vcpi.load_experiment("tvc-bhr-009")  # job ID or name
 seq  = exp["data"]       # gene expression matrix (rows = gene_id, GENCODE v48)
 meta = exp["metadata"]   # sample metadata
 chem = exp["chemistry"]  # compound chemistry
@@ -142,30 +146,34 @@ Returns a Polars DataFrame of all datasets the authenticated user can access.
 
 ```python
 datasets = vcpi.list_datasets()
-# shape: (N, ...) — columns include job_id, name, created_at, etc.
+# shape: (N, ...) — columns include job_id, job_name, imported_at, etc.
 
-# Get a list of job IDs
-job_ids = datasets["job_id"].to_list()
+# Both identifiers are available
+datasets[["job_id", "job_name"]]
 ```
 
 ---
 
-### `query(job_id=None, sql="SELECT * FROM metadata LIMIT 10")`
+### `query(job=None, sql="SELECT * FROM metadata LIMIT 10")`
 
-Run SQL against `metadata` and `chemistry`. These are loaded as in-memory tables — the parquet file is never touched. Pass `job_id` to scope to one experiment, or omit it to query across all datasets you have access to.
+Run SQL against `metadata` and `chemistry`. These are loaded as in-memory tables — the parquet file is never touched. Pass `job` to scope to one experiment, or omit it to query across all datasets you have access to. `job` accepts either the job ID or the human-readable job name.
 
 **Available tables:** `metadata`, `chemistry`
 
 ```python
 # Browse samples — no parquet, instant
 df = vcpi.query(
-    job_id="tvc-pgg-001",
+    job="tvc-bhr-009",          # job ID
+    sql="SELECT * FROM metadata LIMIT 10"
+)
+df = vcpi.query(
+    job="vcpi-0001",            # or job name — either works
     sql="SELECT * FROM metadata LIMIT 10"
 )
 
 # Filter by QC thresholds
 df = vcpi.query(
-    job_id="tvc-pgg-001",
+    job="tvc-bhr-009",
     sql="""
         SELECT sequenced_id, user_compound_id, percent_mitochondrial
         FROM metadata
@@ -177,13 +185,13 @@ df = vcpi.query(
 
 # Browse compounds
 df = vcpi.query(
-    job_id="tvc-pgg-001",
+    job="tvc-bhr-009",
     sql="SELECT * FROM chemistry WHERE log_p < 3 AND molecular_weight < 500 LIMIT 5"
 )
 
 # Join metadata with chemistry
 df = vcpi.query(
-    job_id="tvc-pgg-001",
+    job="tvc-bhr-009",
     sql="""
         SELECT m.sequenced_id, m.user_compound_id, m.timepoint,
                m.compound_concentration, c.smiles, c.log_p, c.tpsa
@@ -211,12 +219,12 @@ df = vcpi.query(
 
 ---
 
-### `describe(job_id=None)`
+### `describe(job=None)`
 
 Returns a dict with the schema of the `metadata` and `chemistry` tables.
 
 ```python
-schemas = vcpi.describe(job_id="tvc-pgg-001")
+schemas = vcpi.describe(job="tvc-bhr-009")  # job ID or name
 
 # Column names in metadata
 print(schemas["metadata"]["column_name"].to_list())
@@ -227,33 +235,34 @@ print(schemas["chemistry"]["column_name"].to_list())
 
 ---
 
-### `load_dataset(job_id)`
+### `load_dataset(job)`
 
 Download the full sequencing parquet for a single experiment. For most use cases, prefer `load_experiment()` which also fetches metadata and chemistry.
 
 ```python
-df = vcpi.load_dataset("tvc-pgg-001")
+df = vcpi.load_dataset("tvc-bhr-009")   # job ID
+df = vcpi.load_dataset("vcpi-0001")     # or job name
 ```
 
 ---
 
-### `load_metadata(job_id)`
+### `load_metadata(job)`
 
 Fetch the experimental metadata CSV for a job as a Polars DataFrame.
 
 ```python
-meta = vcpi.load_metadata("tvc-pgg-001")
+meta = vcpi.load_metadata("tvc-bhr-009")   # job ID or name
 print(meta)
 ```
 
 ---
 
-### `load_chem(job_id)`
+### `load_chem(job)`
 
 Fetch compound chemistry data for a job. All molecular properties are computed via RDKit.
 
 ```python
-chem = vcpi.load_chem("tvc-pgg-001")
+chem = vcpi.load_chem("tvc-bhr-009")   # job ID or name
 print(chem)
 # columns: compound, user_compound_id, smiles, purity_pct,
 #          molecular_weight, log_p, tpsa, inchi_key,
@@ -265,17 +274,18 @@ Returns an empty DataFrame with the correct schema if no chemistry exists for th
 
 ---
 
-### `load_experiment(job_id)`
+### `load_experiment(job)`
 
 Convenience function that downloads sequencing data, metadata, and chemistry in one call. Metadata and chemistry are fetched concurrently after the main download completes.
 
 ```python
-exp = vcpi.load_experiment("tvc-pgg-001")
+exp = vcpi.load_experiment("tvc-bhr-009")   # job ID or name
+exp = vcpi.load_experiment("vcpi-0001")     # either works
 
 exp["data"]      # Polars DataFrame — full sequencing data
 exp["metadata"]  # Polars DataFrame — experimental metadata
 exp["chemistry"] # Polars DataFrame — compound chemistry
-exp["job_id"]    # str — the job_id you passed in
+exp["job_id"]    # str — the resolved job ID
 
 # Access individual pieces
 df   = exp["data"]
@@ -316,7 +326,7 @@ exp = vcpi.load_experiment("tvc-pgg-001")
 ### Working with Pandas
 
 ```python
-exp = vcpi.load_experiment("tvc-pgg-001")
+exp = vcpi.load_experiment("tvc-bhr-009")  # job ID or name
 seq_pd   = exp["data"].to_pandas()
 meta_pd  = exp["metadata"].to_pandas()
 chem_pd  = exp["chemistry"].to_pandas()
@@ -329,7 +339,7 @@ import polars as pl
 
 # No download needed — query() is instant
 controls = vcpi.query(
-    job_id="tvc-pgg-001",
+    job="tvc-bhr-009",
     sql="""
         SELECT sequenced_id, user_compound_id, percent_mitochondrial,
                total_sequenced_reads
@@ -360,12 +370,13 @@ Sys.setenv(TVC_TOKEN = "your-token-here")
 # List datasets
 datasets <- polars_to_r(vcpi$list_datasets())
 
-job_id <- datasets$job_id[[1]]
+job_id   <- datasets$job_id[[1]]
+job_name <- datasets$job_name[[1]]
 
-# Query metadata — instant, no download
+# Query metadata — instant, no download (use job ID or name)
 df <- polars_to_r(vcpi$query(
-  job_id = job_id,
-  sql    = "SELECT * FROM metadata WHERE percent_mitochondrial < 20 LIMIT 100"
+  job = job_id,   # or job = job_name — either works
+  sql = "SELECT * FROM metadata WHERE percent_mitochondrial < 20 LIMIT 100"
 ))
 
 # Download the full experiment
@@ -474,7 +485,7 @@ For gene expression analysis, use `load_experiment()` and work locally.
 ```python
 # All THP-1 samples treated for 24h passing QC
 df = vcpi.query(
-    job_id="tvc-pgg-001",
+    job="tvc-bhr-009",
     sql="""
         SELECT sequenced_id, user_compound_id, compound_concentration,
                percent_mitochondrial, total_sequenced_reads
@@ -488,7 +499,7 @@ df = vcpi.query(
 
 # Compounds with drug-like properties (Lipinski rule of 5)
 df = vcpi.query(
-    job_id="tvc-pgg-001",
+    job="tvc-bhr-009",
     sql="""
         SELECT user_compound_id, molecular_weight, log_p, tpsa,
                num_h_acceptors, num_h_donors, num_rotatable_bonds
@@ -503,7 +514,7 @@ df = vcpi.query(
 
 # Metadata + chemistry joined
 df = vcpi.query(
-    job_id="tvc-pgg-001",
+    job="tvc-bhr-009",
     sql="""
         SELECT m.sequenced_id, m.user_compound_id,
                m.compound_concentration, m.timepoint,

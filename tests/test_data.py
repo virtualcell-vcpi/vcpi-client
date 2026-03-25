@@ -12,9 +12,11 @@ from vcpi.data import (
     EMPTY_CHEM_DF,
     SUPABASE_FUNCTIONS_URL,
     SUPABASE_KEY,
+    _clear_datasets_cache,
     _clear_token_cache,
     _get_token,
     _headers,
+    _resolve_job,
     _safe_load_chem,
     describe,
     list_datasets,
@@ -92,6 +94,9 @@ class TestListDatasets:
 class TestResolveDatasetUrl:
     @respx.mock
     def test_returns_url(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(
             return_value=httpx.Response(200, json=SAMPLE_GET_DATASET_JSON)
         )
@@ -100,9 +105,14 @@ class TestResolveDatasetUrl:
 
     @respx.mock
     def test_raises_when_no_url(self, set_token_env):
-        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(return_value=httpx.Response(200, json={"job_id": "x"}))
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(
+            return_value=httpx.Response(200, json={"job_id": "tvc-test-001"})
+        )
         with pytest.raises(ValueError, match="No parquet URL"):
-            resolve_dataset_url("x")
+            resolve_dataset_url("tvc-test-001")
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +121,9 @@ class TestResolveDatasetUrl:
 class TestLoadMetadata:
     @respx.mock
     def test_parses_csv(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/download-dataset-metadata").mock(
             return_value=httpx.Response(200, content=SAMPLE_METADATA_CSV)
         )
@@ -127,6 +140,9 @@ class TestLoadMetadata:
 class TestLoadChem:
     @respx.mock
     def test_parses_compounds(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(
             return_value=httpx.Response(200, json=SAMPLE_COMPOUNDS_JSON)
         )
@@ -137,23 +153,32 @@ class TestLoadChem:
 
     @respx.mock
     def test_returns_empty_on_404(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(return_value=httpx.Response(404))
-        df = load_chem("nonexistent")
+        df = load_chem("tvc-test-001")
         assert df.shape[0] == 0
         assert df.columns == EMPTY_CHEM_DF.columns
 
     @respx.mock
     def test_returns_empty_on_500(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(return_value=httpx.Response(500))
-        df = load_chem("bad")
+        df = load_chem("tvc-test-001")
         assert df.shape[0] == 0
 
     @respx.mock
     def test_returns_empty_when_no_compounds(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(
             return_value=httpx.Response(200, json={"compounds": []})
         )
-        df = load_chem("empty")
+        df = load_chem("tvc-test-001")
         assert df.shape[0] == 0
         assert df.columns == EMPTY_CHEM_DF.columns
 
@@ -161,8 +186,11 @@ class TestLoadChem:
 class TestSafeLoadChem:
     @respx.mock
     def test_returns_empty_on_exception(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(side_effect=httpx.ConnectError("boom"))
-        df = _safe_load_chem("fail")
+        df = _safe_load_chem("tvc-test-001")
         assert df.shape[0] == 0
         assert df.columns == EMPTY_CHEM_DF.columns
 
@@ -173,12 +201,18 @@ class TestSafeLoadChem:
 class TestQuery:
     @respx.mock
     def test_404_raises_valueerror(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(return_value=httpx.Response(404))
         with pytest.raises(ValueError, match="Dataset not found"):
-            query(job_id="bad-id")
+            query(job="tvc-test-001")
 
     @respx.mock
     def test_single_job_query(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(
             return_value=httpx.Response(200, json=SAMPLE_GET_DATASET_JSON)
         )
@@ -189,7 +223,7 @@ class TestQuery:
             return_value=httpx.Response(200, json=SAMPLE_COMPOUNDS_JSON)
         )
         df = query(
-            job_id="tvc-test-001",
+            job="tvc-test-001",
             sql="SELECT sequenced_id, cell_line FROM metadata LIMIT 1",
         )
         assert isinstance(df, pl.DataFrame)
@@ -198,6 +232,9 @@ class TestQuery:
 
     @respx.mock
     def test_collective_query(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-authorized-urls").mock(
             return_value=httpx.Response(200, json=SAMPLE_LIST_AUTHORIZED_URLS_JSON)
         )
@@ -212,6 +249,9 @@ class TestQuery:
 
     @respx.mock
     def test_join_metadata_chemistry(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(
             return_value=httpx.Response(200, json=SAMPLE_GET_DATASET_JSON)
         )
@@ -222,7 +262,7 @@ class TestQuery:
             return_value=httpx.Response(200, json=SAMPLE_COMPOUNDS_JSON)
         )
         df = query(
-            job_id="tvc-test-001",
+            job="tvc-test-001",
             sql="""
                 SELECT m.sequenced_id, c.smiles
                 FROM metadata m
@@ -247,6 +287,9 @@ class TestQuery:
 class TestDescribe:
     @respx.mock
     def test_returns_both_schemas(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(
             return_value=httpx.Response(200, json=SAMPLE_GET_DATASET_JSON)
         )
@@ -256,8 +299,53 @@ class TestDescribe:
         respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds").mock(
             return_value=httpx.Response(200, json=SAMPLE_COMPOUNDS_JSON)
         )
-        result = describe(job_id="tvc-test-001")
+        result = describe(job="tvc-test-001")
         assert "metadata" in result
         assert "chemistry" in result
         assert "column_name" in result["metadata"].columns
         assert "column_name" in result["chemistry"].columns
+
+
+# ---------------------------------------------------------------------------
+# _resolve_job
+# ---------------------------------------------------------------------------
+class TestResolveJob:
+    @respx.mock
+    def test_resolves_by_job_id(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
+        assert _resolve_job("tvc-test-001") == "tvc-test-001"
+
+    @respx.mock
+    def test_resolves_by_job_name(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
+        assert _resolve_job("vcpi-test-dataset") == "tvc-test-001"
+
+    @respx.mock
+    def test_raises_on_unknown(self, set_token_env):
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
+        with pytest.raises(ValueError, match="No dataset found matching"):
+            _resolve_job("nonexistent")
+
+    @respx.mock
+    def test_uses_cache_on_second_call(self, set_token_env):
+        """list-datasets should only be called once even with two _resolve_job calls."""
+        mock = respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
+        _resolve_job("tvc-test-001")
+        _resolve_job("tvc-test-001")
+        assert mock.call_count == 1
+
+    def test_cache_reset_by_clear(self, set_token_env):
+        """_clear_datasets_cache() forces a fresh fetch on next call."""
+        import vcpi.data as _data
+
+        _data._datasets_cache = [{"job_id": "stale", "job_name": None}]
+        _clear_datasets_cache()
+        assert _data._datasets_cache is None

@@ -11,10 +11,11 @@ Example:
     datasets = vcpi.list_datasets()
 
     # Explore without downloading — fast, uses DuckDB range requests against S3
-    df = vcpi.query(job_id="my-job-id", sql="SELECT * FROM dataset LIMIT 5")
+    df = vcpi.query(job="tvc-bhr-009", sql="SELECT * FROM dataset LIMIT 5")
+    df = vcpi.query(job="vcpi-0001", sql="SELECT * FROM dataset LIMIT 5")  # by name
 
     # Download the full dataset when you need everything locally
-    df = vcpi.load_dataset("my-job-id")
+    df = vcpi.load_dataset("tvc-bhr-009")
 """
 
 from __future__ import annotations
@@ -88,6 +89,47 @@ def _clear_token_cache() -> None:
     _cached_token = None
 
 
+# ---------------------------------------------------------------------------
+# Session-level datasets cache — populated once per process by _resolve_job()
+# ---------------------------------------------------------------------------
+_datasets_cache: list[dict] | None = None
+
+
+def _clear_datasets_cache() -> None:
+    global _datasets_cache
+    _datasets_cache = None
+
+
+def _resolve_job(job: str) -> str:
+    """Resolve a job name or job ID to a canonical job_id.
+
+    Accepts either the opaque identifier (e.g. ``"tvc-bhr-009"``) or the
+    human-readable name (e.g. ``"vcpi-0001"``).  The datasets list is fetched
+    once and cached for the lifetime of the process.
+    """
+    global _datasets_cache
+    if _datasets_cache is None:
+        _datasets_cache = list_datasets().to_dicts()
+
+    # Exact match on job_id first (most common path — users copy IDs)
+    for d in _datasets_cache:
+        if d["job_id"] == job:
+            return job
+
+    # Exact match on job_name
+    matches = [d for d in _datasets_cache if d.get("job_name") == job]
+    if len(matches) == 1:
+        return matches[0]["job_id"]
+    if len(matches) > 1:
+        ids = [m["job_id"] for m in matches]
+        raise ValueError(f"Ambiguous job name {job!r} matches multiple datasets: {ids}")
+
+    raise ValueError(
+        f"No dataset found matching {job!r}. "
+        "Run vcpi.list_datasets() to see available job IDs and names."
+    )
+
+
 def _get_token() -> str:
     """Retrieve the bearer token, caching it for the lifetime of the process."""
     global _cached_token
@@ -157,12 +199,13 @@ def list_datasets() -> pl.DataFrame:
     return pl.DataFrame(resp.json()["datasets"])
 
 
-def resolve_dataset_url(job_id: str) -> str:
+def resolve_dataset_url(job: str) -> str:
     """
     Resolve and return the signed parquet URL for a job.
     Separated from the download so R can own the streaming + progress bar,
     passing the downloaded file path back via read_parquet_file().
     """
+    job_id = _resolve_job(job)
     with httpx.Client(timeout=TIMEOUT_DATASET) as client:
         resp = client.get(
             f"{SUPABASE_FUNCTIONS_URL}/get-dataset",
@@ -178,7 +221,7 @@ def resolve_dataset_url(job_id: str) -> str:
     return data_url
 
 
-def load_dataset(job_id: str) -> pl.DataFrame:
+def load_dataset(job: str) -> pl.DataFrame:
     """
     Download the full sequencing dataset for a single experiment.
 
@@ -188,13 +231,16 @@ def load_dataset(job_id: str) -> pl.DataFrame:
 
     Parameters
     ----------
-    job_id:
-        The experiment identifier returned by :func:`list_datasets`.
+    job:
+        The experiment identifier or human-readable name returned by
+        :func:`list_datasets`.  Either the job ID (e.g. ``"tvc-bhr-009"``)
+        or the job name (e.g. ``"vcpi-0001"``) is accepted.
 
     Returns
     -------
     pl.DataFrame
     """
+    job_id = _resolve_job(job)
     data_url = resolve_dataset_url(job_id)
     logger.info("Downloading dataset for %s", job_id)
 
@@ -225,19 +271,20 @@ def load_dataset(job_id: str) -> pl.DataFrame:
         os.unlink(tmp_path)
 
 
-def load_metadata(job_id: str) -> pl.DataFrame:
+def load_metadata(job: str) -> pl.DataFrame:
     """
     Fetch experimental metadata for a single job as a Polars DataFrame.
 
     Parameters
     ----------
-    job_id:
-        The experiment identifier.
+    job:
+        The experiment identifier or human-readable name.
 
     Returns
     -------
     pl.DataFrame
     """
+    job_id = _resolve_job(job)
     with httpx.Client(timeout=TIMEOUT_METADATA) as client:
         resp = client.get(
             f"{SUPABASE_FUNCTIONS_URL}/download-dataset-metadata",
@@ -248,19 +295,19 @@ def load_metadata(job_id: str) -> pl.DataFrame:
     return pl.read_csv(io.BytesIO(resp.content))
 
 
-def load_chem(job_id: str) -> pl.DataFrame:
+def load_chem(job: str) -> pl.DataFrame:
     """
     Fetch compound chemistry data for a single job.
 
     Returns an empty DataFrame with the correct schema when no chemistry
-    data exists for the given ``job_id`` (HTTP 404).
+    data exists for the given job (HTTP 404).
 
     All molecular properties are computed via RDKit.
 
     Parameters
     ----------
-    job_id:
-        The experiment identifier.
+    job:
+        The experiment identifier or human-readable name.
 
     Returns
     -------
@@ -270,6 +317,7 @@ def load_chem(job_id: str) -> pl.DataFrame:
         ``inchi_key``, ``num_rotatable_bonds``, ``num_h_acceptors``,
         ``num_h_donors``, ``num_atoms``, ``num_bonds``.
     """
+    job_id = _resolve_job(job)
     with httpx.Client(timeout=TIMEOUT_METADATA) as client:
         resp = client.get(
             f"{SUPABASE_FUNCTIONS_URL}/get-dataset-compounds",
@@ -287,7 +335,7 @@ def load_chem(job_id: str) -> pl.DataFrame:
 
 
 def query(
-    job_id: str | None = None,
+    job: str | None = None,
     sql: str = "SELECT * FROM metadata LIMIT 10",
 ) -> pl.DataFrame:
     """
@@ -316,9 +364,11 @@ def query(
 
     Parameters
     ----------
-    job_id:
-        Restrict both tables to a single experiment.  Pass ``None``
-        to query across every dataset the authenticated user can access.
+    job:
+        Restrict both tables to a single experiment.  Accepts either the
+        job ID (e.g. ``"tvc-bhr-009"``) or the human-readable job name
+        (e.g. ``"vcpi-0001"``).  Pass ``None`` to query across every
+        dataset the authenticated user can access.
     sql:
         DuckDB-compatible SQL.  Available tables: ``metadata``,
         ``chemistry``.
@@ -333,6 +383,7 @@ def query(
     # ---------------------------------------------------------------------------
     # 1. Resolve manifest (parquet URLs + job_ids)
     # ---------------------------------------------------------------------------
+    job_id = _resolve_job(job) if job is not None else None
     with httpx.Client(timeout=TIMEOUT_DATASET) as client:
         if job_id:
             resp = client.get(
@@ -441,14 +492,15 @@ def query(
     return result[0]
 
 
-def describe(job_id: str | None = None) -> dict[str, pl.DataFrame]:
+def describe(job: str | None = None) -> dict[str, pl.DataFrame]:
     """
     Return the schema of the ``metadata`` and ``chemistry`` tables.
 
     Parameters
     ----------
-    job_id:
-        Scope to a single experiment.  ``None`` uses the full collective.
+    job:
+        Scope to a single experiment.  Accepts either the job ID or the
+        human-readable job name.  ``None`` uses the full collective.
 
     Returns
     -------
@@ -456,12 +508,12 @@ def describe(job_id: str | None = None) -> dict[str, pl.DataFrame]:
         each containing a DataFrame of column names and types.
     """
     return {
-        "metadata": query(job_id, "DESCRIBE metadata"),
-        "chemistry": query(job_id, "DESCRIBE chemistry"),
+        "metadata": query(job, "DESCRIBE metadata"),
+        "chemistry": query(job, "DESCRIBE chemistry"),
     }
 
 
-def load_experiment(job_id: str) -> dict[str, pl.DataFrame | str]:
+def load_experiment(job: str) -> dict[str, pl.DataFrame | str]:
     """
     Convenience loader: fetch sequencing data, metadata, and chemistry for
     one experiment in a single call.  Metadata and chemistry are fetched
@@ -471,8 +523,8 @@ def load_experiment(job_id: str) -> dict[str, pl.DataFrame | str]:
 
     Parameters
     ----------
-    job_id:
-        The experiment identifier.
+    job:
+        The experiment identifier or human-readable name.
 
     Returns
     -------
@@ -480,8 +532,9 @@ def load_experiment(job_id: str) -> dict[str, pl.DataFrame | str]:
         * ``"data"``      — sequencing :class:`pl.DataFrame`
         * ``"metadata"``  — metadata :class:`pl.DataFrame` (empty on failure)
         * ``"chemistry"`` — chemistry :class:`pl.DataFrame` (empty on failure)
-        * ``"job_id"``    — the original ``job_id`` string
+        * ``"job_id"``    — the resolved job ID string
     """
+    job_id = _resolve_job(job)
     print(f"\n--- Loading experiment: {job_id} ---")
 
     # Sequencing data is the heavy lift — download first
