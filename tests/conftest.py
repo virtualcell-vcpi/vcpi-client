@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from vcpi.data import _clear_token_cache
+from vcpi.data import _clear_datasets_cache, _clear_token_cache
 
 FAKE_TOKEN = "test-token-abc123"
 
@@ -13,10 +13,10 @@ SAMPLE_DATASETS_JSON = {
     "datasets": [
         {
             "job_id": "tvc-test-001",
+            "job_name": "vcpi-test-dataset",
             "imported_at": "2026-01-01T00:00:00+00:00",
             "is_public": True,
             "parquet_file_size_bytes": 100,
-            "dataset_name": "Test Dataset",
             "datapoint_count": 50,
             "cell_lines": ["THP-1"],
             "timepoints": ["24h"],
@@ -78,9 +78,11 @@ def _clean_token_state(request):
         return
 
     _clear_token_cache()
+    _clear_datasets_cache()
     old = os.environ.pop("TVC_TOKEN", None)
     yield
     _clear_token_cache()
+    _clear_datasets_cache()
     if old is not None:
         os.environ["TVC_TOKEN"] = old
     else:
