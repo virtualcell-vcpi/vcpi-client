@@ -92,21 +92,31 @@ combined = vcpi.load_experiments(
 
 ## API Reference
 
-### `login(token=None)`
+### `login()`
+
+Validate and store your API key in the system keychain. Accepts an optional token argument; if omitted, prompts interactively.
 ```python
-vcpi.login()           # interactive
-vcpi.login("my-token") # direct
+vcpi.login()            # interactive
+vcpi.login("my-token")  # direct
 ```
 
+---
+
 ### `list_datasets()`
+
+Returns a Polars DataFrame of all datasets the authenticated user can access.
 ```python
 datasets = vcpi.list_datasets()
 datasets[["job_id", "job_name"]]
 ```
 
-### `query(job=None, sql=...)`
+---
 
-Run SQL against `metadata` and `chemistry`. Pass `job` to scope to one experiment, or omit to query across all accessible datasets. Accepts job ID or human-readable name.
+### `query()`
+
+Run SQL against `metadata` and `chemistry`. Pass `job` to scope to one experiment, or omit it to query across all accessible datasets. `job` accepts either a job ID or human-readable name. `sql` defaults to `SELECT * FROM metadata LIMIT 10`.
+
+**Available tables:** `metadata`, `chemistry`
 ```python
 # Single experiment
 df = vcpi.query(
@@ -152,27 +162,37 @@ df = vcpi.query(
 )
 ```
 
-### `describe(job=None)`
+---
+
+### `describe()`
+
+Returns a dict with the schema of the `metadata` and `chemistry` tables. Pass `job` to scope to one experiment, or omit to describe across all experiments.
 ```python
 schemas = vcpi.describe("vcpi-0001")
 schemas["metadata"]["column_name"].to_list()
 schemas["chemistry"]["column_name"].to_list()
 ```
 
-### `load_dataset(job)`
+---
+
+### `load_dataset()`
 
 Download the raw sequencing parquet only. Prefer `load_experiment()` for most use cases.
 ```python
 df = vcpi.load_dataset("vcpi-0001")
 ```
 
-### `load_metadata(job)` / `load_chem(job)`
+---
+
+### `load_metadata()` / `load_chem()`
 ```python
 meta = vcpi.load_metadata("vcpi-0001")
 chem = vcpi.load_chem("vcpi-0001")
 ```
 
-### `load_experiment(job)`
+---
+
+### `load_experiment()`
 
 Download sequencing data, metadata, and chemistry for a single experiment. Returns all genes including zero-expression rows.
 ```python
@@ -184,9 +204,13 @@ exp["chemistry"] # compound chemistry
 exp["job_id"]    # resolved job ID
 ```
 
-### `load_experiments(jobs, sql=None)`
+---
 
-Download and merge multiple experiments. Zero-expression genes are removed before joining. Optionally filter samples with a SQL statement.
+### `load_experiments()`
+
+Download and merge multiple experiments. Zero-expression genes are removed before joining. Pass `sql` to filter samples before merging, using the same syntax as `query()`. Omit `sql` to include all samples.
+
+If combined data exceeds 8 GB, a warning is raised and individual frames are returned as a dict keyed by job ID rather than a joined matrix — check `result["fallback"]` to detect this.
 ```python
 # Basic merge
 combined = vcpi.load_experiments(["vcpi-0001", "vcpi-0002"])
