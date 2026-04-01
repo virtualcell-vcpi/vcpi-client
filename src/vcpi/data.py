@@ -49,6 +49,10 @@ SUPABASE_FUNCTIONS_URL = "https://pdexvrcgdabfgnkpgqpu.supabase.co/functions/v1"
 # The user's TVC_TOKEN (below) is the actual secret that controls data access.
 SUPABASE_KEY: str = "sb_publishable_Q6Mr49QEXcc4cu64ebdArg_26DRBnuj"
 
+# Memory thresholds
+_WARN_BYTES = 2 * 1024 ** 3   # 2 GB — warn but proceed
+_ABORT_BYTES = 8 * 1024 ** 3  # 8 GB — refuse to join, return list fallback
+
 # ---------------------------------------------------------------------------
 # Timeouts (seconds)
 # ---------------------------------------------------------------------------
@@ -561,58 +565,171 @@ def load_experiment(job: str) -> dict[str, pl.DataFrame | str]:
         "job_id": job_id,
     }
 
-def load_experiments(jobs: list[str]) -> dict[str, pl.DataFrame | list[str]]:
-    """
-    Load and merge multiple experiments in a single call.
+def _estimate_dataframe_bytes(df: pl.DataFrame) -> int:
+    """Estimate in-memory size of a Polars DataFrame in bytes."""
+    return sum(df[col].estimated_size() for col in df.columns)
 
-    Data frames are genes × samples (wide format). Each experiment adds new
-    sample columns, so datasets are joined horizontally on the shared gene ID
-    column rather than concatenated vertically.
+
+def load_experiments(
+    jobs: list[str],
+    sql: str | None = None,
+) -> dict[str, pl.DataFrame | list[str]]:
+    """
+    Load and merge multiple experiments, retaining only expressed genes.
+
+    Downloads the full sequencing parquet for each experiment, optionally
+    filters samples via a SQL query against metadata, then removes genes
+    with zero expression across all samples in the combined set before
+    joining horizontally.
+
+    This is a convenience function for cross-experiment analysis. For the
+    full unfiltered matrix of a single experiment (zeros included), use
+    :func:`load_experiment`. For metadata and chemistry queries without
+    downloading parquets, use :func:`query`.
 
     Parameters
     ----------
     jobs:
         List of experiment identifiers or human-readable names
         (e.g. ``["vcpi-0001", "vcpi-0002"]``).
+    sql:
+        Optional SQL WHERE clause (or full SELECT) passed to :func:`query`
+        to filter samples before joining. Available tables: ``metadata``,
+        ``chemistry``. Example: ``"SELECT * FROM metadata WHERE
+        user_compound_id = 'DMSO'"``.
 
     Returns
     -------
     dict with keys:
-        * ``"data"``      — horizontally joined sequencing :class:`pl.DataFrame`
+        * ``"data"``      — horizontally joined sequencing :class:`pl.DataFrame`,
+                            expressed genes only (zero-only columns removed)
         * ``"metadata"``  — concatenated metadata :class:`pl.DataFrame`
         * ``"chemistry"`` — concatenated chemistry :class:`pl.DataFrame`
         * ``"job_ids"``   — list of resolved job ID strings
+        * ``"fallback"``  — ``True`` if memory limits prevented joining;
+                            in that case ``"data"`` is a dict of
+                            ``{job_id: pl.DataFrame}`` instead of a single frame
+
+    Warnings
+    --------
+    A warning is emitted if the estimated combined size exceeds 2 GB.
+    If the estimated size exceeds 8 GB the join is skipped entirely and
+    individual frames are returned under the ``"data"`` key as a dict.
     """
     results = [load_experiment(j) for j in jobs]
+    job_ids = [r["job_id"] for r in results]
 
-    # Data is genes (rows) x samples (columns).
-    # Each release adds new sample columns — join wide on the gene ID column.
-    data_frames = [r["data"] for r in results]
-    all_cols = [set(df.columns) for df in data_frames]
-    shared = list(all_cols[0].intersection(*all_cols[1:]))
-    if len(shared) != 1:
-        raise ValueError(
-            f"Expected exactly one shared column across experiments (gene ID), "
-            f"found {len(shared)}: {shared}"
-        )
-    gene_col = shared[0]
-
-    data = data_frames[0]
-    for df in data_frames[1:]:
-        data = data.join(df, on=gene_col, how="full", coalesce=True)
-
-    # Metadata — consistent schema across releases, simple concat
+    # ── Metadata + chemistry ────────────────────────────────────────────────
     meta_frames = [r["metadata"] for r in results if not r["metadata"].is_empty()]
     metadata = pl.concat(meta_frames) if meta_frames else pl.DataFrame()
 
-    # Chemistry — plain concat, no deduplication.
-    # Control compounds legitimately appear in multiple releases.
     chem_frames = [r["chemistry"] for r in results if not r["chemistry"].is_empty()]
     chemistry = pl.concat(chem_frames) if chem_frames else EMPTY_CHEM_DF
 
-    return {
-        "data": data,
-        "metadata": metadata,
-        "chemistry": chemistry,
-        "job_ids": [r["job_id"] for r in results],
-    }
+    # ── Optional sample filter via query() ──────────────────────────────────
+    sample_ids: set[str] | None = None
+    if sql is not None:
+        filtered_meta = query(sql=sql)
+        if "sequenced_id" not in filtered_meta.columns:
+            raise ValueError(
+                "sql filter must return a 'sequenced_id' column. "
+                "Use: SELECT * FROM metadata WHERE ..."
+            )
+        sample_ids = set(filtered_meta["sequenced_id"].to_list())
+        metadata = metadata.filter(pl.col("sequenced_id").is_in(sample_ids))
+
+    # ── Filter data frames to requested samples ─────────────────────────────
+    data_frames: dict[str, pl.DataFrame] = {}
+    gene_col: str | None = None
+
+    for r in results:
+        df = r["data"]
+        jid = r["job_id"]
+
+        # Identify gene ID column — the one shared column across all releases
+        if gene_col is None:
+            all_cols = [set(r2["data"].columns) for r2 in results]
+            shared = list(all_cols[0].intersection(*all_cols[1:]))
+            if len(shared) != 1:
+                raise ValueError(
+                    f"Expected exactly one shared column (gene ID), found {len(shared)}: {shared}"
+                )
+            gene_col = shared[0]
+
+        # Filter to requested samples if sql was provided
+        if sample_ids is not None:
+            keep_cols = [gene_col] + [c for c in df.columns if c in sample_ids]
+            df = df.select(keep_cols)
+
+        # Drop genes with zero expression across all samples in this frame
+        sample_cols = [c for c in df.columns if c != gene_col]
+        if sample_cols:
+            expressed_mask = (
+                df.select(sample_cols)
+                .select(pl.all_horizontal(pl.all() == 0))
+                .to_series()
+                .not_()
+            )
+            df = df.filter(expressed_mask)
+
+        data_frames[jid] = df
+
+    # ── Memory check ────────────────────────────────────────────────────────
+    estimated_bytes = sum(_estimate_dataframe_bytes(df) for df in data_frames.values())
+    estimated_gb = estimated_bytes / 1024 ** 3
+
+    if estimated_bytes > _ABORT_BYTES:
+        import warnings
+        warnings.warn(
+            f"Combined data estimated at {estimated_gb:.1f} GB, which exceeds the "
+            f"{_ABORT_BYTES // 1024**3} GB join limit. Returning individual frames "
+            f"as a dict instead of a joined DataFrame. Access via result['data'][job_id].",
+            ResourceWarning,
+            stacklevel=2,
+        )
+        return {
+            "data": data_frames,
+            "metadata": metadata,
+            "chemistry": chemistry,
+            "job_ids": job_ids,
+            "fallback": True,
+        }
+
+    if estimated_bytes > _WARN_BYTES:
+        import warnings
+        warnings.warn(
+            f"Combined data estimated at {estimated_gb:.1f} GB. "
+            f"This may be slow or cause memory pressure on smaller machines.",
+            ResourceWarning,
+            stacklevel=2,
+        )
+
+    # ── Horizontal join on gene ID column ───────────────────────────────────
+    try:
+        data = list(data_frames.values())[0]
+        for df in list(data_frames.values())[1:]:
+            data = data.join(df, on=gene_col, how="full", coalesce=True)
+
+        return {
+            "data": data,
+            "metadata": metadata,
+            "chemistry": chemistry,
+            "job_ids": job_ids,
+            "fallback": False,
+        }
+
+    except Exception as exc:
+        import warnings
+        warnings.warn(
+            f"Join failed ({exc}). Returning individual frames as a dict instead. "
+            f"Access via result['data'][job_id].",
+            ResourceWarning,
+            stacklevel=2,
+        )
+        return {
+            "data": data_frames,
+            "metadata": metadata,
+            "chemistry": chemistry,
+            "job_ids": job_ids,
+            "fallback": True,
+        }
