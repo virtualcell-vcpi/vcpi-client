@@ -593,40 +593,44 @@ def load_experiments(
         List of experiment identifiers or human-readable names
         (e.g. ``["vcpi-0001", "vcpi-0002"]``).
     sql:
-        Optional SQL WHERE clause (or full SELECT) passed to :func:`query`
-        to filter samples before joining. Available tables: ``metadata``,
-        ``chemistry``. Example: ``"SELECT * FROM metadata WHERE
-        user_compound_id = 'DMSO'"``.
+        Optional SQL statement passed to :func:`query` to filter samples
+        before joining. Available tables: ``metadata``, ``chemistry``.
+        Example: ``"SELECT * FROM metadata WHERE user_compound_id = 'DMSO'"``.
 
     Returns
     -------
     dict with keys:
         * ``"data"``      — horizontally joined sequencing :class:`pl.DataFrame`,
-                            expressed genes only (zero-only columns removed)
+                            expressed genes only (zero-only columns removed).
+                            If memory limits are exceeded, a dict of
+                            ``{job_id: pl.DataFrame}`` is returned instead.
         * ``"metadata"``  — concatenated metadata :class:`pl.DataFrame`
         * ``"chemistry"`` — concatenated chemistry :class:`pl.DataFrame`
         * ``"job_ids"``   — list of resolved job ID strings
-        * ``"fallback"``  — ``True`` if memory limits prevented joining;
-                            in that case ``"data"`` is a dict of
-                            ``{job_id: pl.DataFrame}`` instead of a single frame
-
-    Warnings
-    --------
-    A warning is emitted if the estimated combined size exceeds 2 GB.
-    If the estimated size exceeds 8 GB the join is skipped entirely and
-    individual frames are returned under the ``"data"`` key as a dict.
+        * ``"fallback"``  — ``True`` if memory limits prevented joining
     """
     results = [load_experiment(j) for j in jobs]
     job_ids = [r["job_id"] for r in results]
 
-    # ── Metadata + chemistry ────────────────────────────────────────────────
+    # ── Identify gene ID column — the one shared column across all releases ──
+    all_col_sets = [set(r["data"].columns) for r in results]
+    shared = list(all_col_sets[0].intersection(*all_col_sets[1:]))
+    if len(shared) != 1:
+        raise ValueError(
+            f"Expected exactly one shared column (gene ID), found {len(shared)}: {shared}"
+        )
+    gene_col = shared[0]
+
+    # ── Metadata + chemistry ─────────────────────────────────────────────────
     meta_frames = [r["metadata"] for r in results if not r["metadata"].is_empty()]
     metadata = pl.concat(meta_frames) if meta_frames else pl.DataFrame()
 
     chem_frames = [r["chemistry"] for r in results if not r["chemistry"].is_empty()]
     chemistry = pl.concat(chem_frames) if chem_frames else EMPTY_CHEM_DF
 
-    # ── Optional sample filter via query() ──────────────────────────────────
+    # ── Optional sample filter via query() ───────────────────────────────────
+    # sequenced_id is text in the database and parquet column names are also
+    # strings — cast everything to str to avoid type mismatch in comparisons
     sample_ids: set[str] | None = None
     if sql is not None:
         filtered_meta = query(sql=sql)
@@ -635,30 +639,24 @@ def load_experiments(
                 "sql filter must return a 'sequenced_id' column. "
                 "Use: SELECT * FROM metadata WHERE ..."
             )
-        sample_ids = set(str(s) for s in filtered_meta["sequenced_id"].to_list())
-        metadata = metadata.filter(pl.col("sequenced_id").is_in(sample_ids))
+        sample_ids = set(filtered_meta["sequenced_id"].cast(pl.Utf8).to_list())
+        metadata = metadata.filter(
+            pl.col("sequenced_id").cast(pl.Utf8).is_in(sample_ids)
+        )
 
-    # ── Filter data frames to requested samples ─────────────────────────────
+    # ── Filter data frames to requested samples + drop zero-expression genes ─
     data_frames: dict[str, pl.DataFrame] = {}
-    gene_col: str | None = None
 
     for r in results:
         df = r["data"]
         jid = r["job_id"]
 
-        # Identify gene ID column — the one shared column across all releases
-        if gene_col is None:
-            all_cols = [set(r2["data"].columns) for r2 in results]
-            shared = list(all_cols[0].intersection(*all_cols[1:]))
-            if len(shared) != 1:
-                raise ValueError(
-                    f"Expected exactly one shared column (gene ID), found {len(shared)}: {shared}"
-                )
-            gene_col = shared[0]
-
         # Filter to requested samples if sql was provided
+        # Parquet column names are strings — match against sample_ids (also strings)
         if sample_ids is not None:
-            keep_cols = [gene_col] + [c for c in df.columns if c in sample_ids]
+            keep_cols = [gene_col] + [
+                c for c in df.columns if c != gene_col and c in sample_ids
+            ]
             df = df.select(keep_cols)
 
         # Drop genes with zero expression across all samples in this frame
@@ -674,7 +672,7 @@ def load_experiments(
 
         data_frames[jid] = df
 
-    # ── Memory check ────────────────────────────────────────────────────────
+    # ── Memory check ─────────────────────────────────────────────────────────
     estimated_bytes = sum(_estimate_dataframe_bytes(df) for df in data_frames.values())
     estimated_gb = estimated_bytes / 1024 ** 3
 
@@ -683,7 +681,8 @@ def load_experiments(
         warnings.warn(
             f"Combined data estimated at {estimated_gb:.1f} GB, which exceeds the "
             f"{_ABORT_BYTES // 1024**3} GB join limit. Returning individual frames "
-            f"as a dict instead of a joined DataFrame. Access via result['data'][job_id].",
+            f"as a dict instead of a joined DataFrame. "
+            f"Access via result['data'][job_id].",
             ResourceWarning,
             stacklevel=2,
         )
@@ -704,7 +703,7 @@ def load_experiments(
             stacklevel=2,
         )
 
-    # ── Horizontal join on gene ID column ───────────────────────────────────
+    # ── Horizontal join on gene ID column ────────────────────────────────────
     try:
         data = list(data_frames.values())[0]
         for df in list(data_frames.values())[1:]:
