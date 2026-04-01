@@ -560,3 +560,37 @@ def load_experiment(job: str) -> dict[str, pl.DataFrame | str]:
         "chemistry": chemistry,
         "job_id": job_id,
     }
+
+def load_experiments(jobs: list[str]) -> dict[str, pl.DataFrame | list[str]]:
+    """
+    Load and merge multiple experiments in a single call.
+
+    Parameters
+    ----------
+    jobs:
+        List of experiment identifiers or human-readable names
+        (e.g. ``["vcpi-0001", "vcpi-0002"]``).
+
+    Returns
+    -------
+    dict with keys:
+        * ``"data"``      — concatenated sequencing :class:`pl.DataFrame`
+        * ``"metadata"``  — concatenated metadata :class:`pl.DataFrame`
+        * ``"chemistry"`` — deduplicated chemistry :class:`pl.DataFrame`
+        * ``"job_ids"``   — list of resolved job ID strings
+    """
+    results = [load_experiment(j) for j in jobs]
+
+    data = pl.concat([r["data"] for r in results])
+    metadata = pl.concat([r["metadata"] for r in results if not r["metadata"].is_empty()])
+
+    # Deduplicate chemistry on inchi_key — same compound may appear in both releases
+    chem_frames = [r["chemistry"] for r in results if not r["chemistry"].is_empty()]
+    chemistry = pl.concat(chem_frames).unique(subset=["inchi_key"]) if chem_frames else EMPTY_CHEM_DF
+
+    return {
+        "data": data,
+        "metadata": metadata,
+        "chemistry": chemistry,
+        "job_ids": [r["job_id"] for r in results],
+    }
