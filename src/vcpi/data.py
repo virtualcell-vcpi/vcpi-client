@@ -635,7 +635,7 @@ def load_experiments(
                 "sql filter must return a 'sequenced_id' column. "
                 "Use: SELECT * FROM metadata WHERE ..."
             )
-        sample_ids = set(filtered_meta["sequenced_id"].to_list())
+        sample_ids = set(str(s) for s in filtered_meta["sequenced_id"].to_list())
         metadata = metadata.filter(pl.col("sequenced_id").is_in(sample_ids))
 
     # ── Filter data frames to requested samples ─────────────────────────────
