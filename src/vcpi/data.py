@@ -586,4 +586,33 @@ def load_experiments(jobs: list[str]) -> dict[str, pl.DataFrame | list[str]]:
     results = [load_experiment(j) for j in jobs]
 
     # Data is genes (rows) x samples (columns).
-    # Each release adds new sample columns — join w
+    # Each release adds new sample columns — join wide on the gene ID column.
+    data_frames = [r["data"] for r in results]
+    all_cols = [set(df.columns) for df in data_frames]
+    shared = list(all_cols[0].intersection(*all_cols[1:]))
+    if len(shared) != 1:
+        raise ValueError(
+            f"Expected exactly one shared column across experiments (gene ID), "
+            f"found {len(shared)}: {shared}"
+        )
+    gene_col = shared[0]
+
+    data = data_frames[0]
+    for df in data_frames[1:]:
+        data = data.join(df, on=gene_col, how="full", coalesce=True)
+
+    # Metadata — consistent schema across releases, simple concat
+    meta_frames = [r["metadata"] for r in results if not r["metadata"].is_empty()]
+    metadata = pl.concat(meta_frames) if meta_frames else pl.DataFrame()
+
+    # Chemistry — plain concat, no deduplication.
+    # Control compounds legitimately appear in multiple releases.
+    chem_frames = [r["chemistry"] for r in results if not r["chemistry"].is_empty()]
+    chemistry = pl.concat(chem_frames) if chem_frames else EMPTY_CHEM_DF
+
+    return {
+        "data": data,
+        "metadata": metadata,
+        "chemistry": chemistry,
+        "job_ids": [r["job_id"] for r in results],
+    }
