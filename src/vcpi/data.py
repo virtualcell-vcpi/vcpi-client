@@ -50,8 +50,8 @@ SUPABASE_FUNCTIONS_URL = "https://pdexvrcgdabfgnkpgqpu.supabase.co/functions/v1"
 SUPABASE_KEY: str = "sb_publishable_Q6Mr49QEXcc4cu64ebdArg_26DRBnuj"
 
 # Memory thresholds
-_WARN_BYTES = 2 * 1024 ** 3   # 2 GB — warn but proceed
-_ABORT_BYTES = 8 * 1024 ** 3  # 8 GB — refuse to join, return list fallback
+_WARN_BYTES = 2 * 1024**3  # 2 GB — warn but proceed
+_ABORT_BYTES = 8 * 1024**3  # 8 GB — refuse to join, return list fallback
 
 # ---------------------------------------------------------------------------
 # Timeouts (seconds)
@@ -128,10 +128,7 @@ def _resolve_job(job: str) -> str:
         ids = [m["job_id"] for m in matches]
         raise ValueError(f"Ambiguous job name {job!r} matches multiple datasets: {ids}")
 
-    raise ValueError(
-        f"No dataset found matching {job!r}. "
-        "Run vcpi.list_datasets() to see available job IDs and names."
-    )
+    raise ValueError(f"No dataset found matching {job!r}. Run vcpi.list_datasets() to see available job IDs and names.")
 
 
 def _get_token() -> str:
@@ -565,6 +562,7 @@ def load_experiment(job: str) -> dict[str, pl.DataFrame | str]:
         "job_id": job_id,
     }
 
+
 def _estimate_dataframe_bytes(df: pl.DataFrame) -> int:
     """Estimate in-memory size of a Polars DataFrame in bytes."""
     return sum(df[col].estimated_size() for col in df.columns)
@@ -616,9 +614,7 @@ def load_experiments(
     all_col_sets = [set(r["data"].columns) for r in results]
     shared = list(all_col_sets[0].intersection(*all_col_sets[1:]))
     if len(shared) != 1:
-        raise ValueError(
-            f"Expected exactly one shared column (gene ID), found {len(shared)}: {shared}"
-        )
+        raise ValueError(f"Expected exactly one shared column (gene ID), found {len(shared)}: {shared}")
     gene_col = shared[0]
 
     # ── Metadata + chemistry ─────────────────────────────────────────────────
@@ -635,14 +631,9 @@ def load_experiments(
     if sql is not None:
         filtered_meta = query(sql=sql)
         if "sequenced_id" not in filtered_meta.columns:
-            raise ValueError(
-                "sql filter must return a 'sequenced_id' column. "
-                "Use: SELECT * FROM metadata WHERE ..."
-            )
+            raise ValueError("sql filter must return a 'sequenced_id' column. Use: SELECT * FROM metadata WHERE ...")
         sample_ids = set(filtered_meta["sequenced_id"].cast(pl.Utf8).to_list())
-        metadata = metadata.filter(
-            pl.col("sequenced_id").cast(pl.Utf8).is_in(sample_ids)
-        )
+        metadata = metadata.filter(pl.col("sequenced_id").cast(pl.Utf8).is_in(sample_ids))
 
     # ── Filter data frames to requested samples + drop zero-expression genes ─
     data_frames: dict[str, pl.DataFrame] = {}
@@ -654,30 +645,24 @@ def load_experiments(
         # Filter to requested samples if sql was provided
         # Parquet column names are strings — match against sample_ids (also strings)
         if sample_ids is not None:
-            keep_cols = [gene_col] + [
-                c for c in df.columns if c != gene_col and c in sample_ids
-            ]
+            keep_cols = [gene_col] + [c for c in df.columns if c != gene_col and c in sample_ids]
             df = df.select(keep_cols)
 
         # Drop genes with zero expression across all samples in this frame
         sample_cols = [c for c in df.columns if c != gene_col]
         if sample_cols:
-            expressed_mask = (
-                df.select(sample_cols)
-                .select(pl.all_horizontal(pl.all() == 0))
-                .to_series()
-                .not_()
-            )
+            expressed_mask = df.select(sample_cols).select(pl.all_horizontal(pl.all() == 0)).to_series().not_()
             df = df.filter(expressed_mask)
 
         data_frames[jid] = df
 
     # ── Memory check ─────────────────────────────────────────────────────────
     estimated_bytes = sum(_estimate_dataframe_bytes(df) for df in data_frames.values())
-    estimated_gb = estimated_bytes / 1024 ** 3
+    estimated_gb = estimated_bytes / 1024**3
 
     if estimated_bytes > _ABORT_BYTES:
         import warnings
+
         warnings.warn(
             f"Combined data estimated at {estimated_gb:.1f} GB, which exceeds the "
             f"{_ABORT_BYTES // 1024**3} GB join limit. Returning individual frames "
@@ -696,6 +681,7 @@ def load_experiments(
 
     if estimated_bytes > _WARN_BYTES:
         import warnings
+
         warnings.warn(
             f"Combined data estimated at {estimated_gb:.1f} GB. "
             f"This may be slow or cause memory pressure on smaller machines.",
@@ -719,9 +705,9 @@ def load_experiments(
 
     except Exception as exc:
         import warnings
+
         warnings.warn(
-            f"Join failed ({exc}). Returning individual frames as a dict instead. "
-            f"Access via result['data'][job_id].",
+            f"Join failed ({exc}). Returning individual frames as a dict instead. Access via result['data'][job_id].",
             ResourceWarning,
             stacklevel=2,
         )

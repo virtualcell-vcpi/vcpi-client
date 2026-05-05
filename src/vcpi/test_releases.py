@@ -83,9 +83,7 @@ def _identify_gene_column(data: pl.DataFrame) -> str:
     for c in data.columns:
         if not data.schema[c].is_numeric():
             return c
-    raise ValueError(
-        f"Could not identify gene-ID column in parquet with columns: {data.columns[:5]}..."
-    )
+    raise ValueError(f"Could not identify gene-ID column in parquet with columns: {data.columns[:5]}...")
 
 
 def _build_anndata(
@@ -165,9 +163,7 @@ def _validate_release(
         return report
 
     parquet_samples = [c for c in data.columns if c != gene_col]
-    meta_samples = (
-        metadata["sequenced_id"].cast(pl.Utf8).drop_nulls().to_list()
-    )
+    meta_samples = metadata["sequenced_id"].cast(pl.Utf8).drop_nulls().to_list()
 
     parquet_set = set(parquet_samples)
     meta_set = set(meta_samples)
@@ -183,26 +179,20 @@ def _validate_release(
 
     if len(parquet_samples) != len(parquet_set):
         report.issues.append(
-            f"parquet has duplicate sample columns "
-            f"({len(parquet_samples) - len(parquet_set)} duplicates)"
+            f"parquet has duplicate sample columns ({len(parquet_samples) - len(parquet_set)} duplicates)"
         )
     if len(meta_samples) != len(meta_set):
         report.issues.append(
-            f"metadata has duplicate sequenced_id rows "
-            f"({len(meta_samples) - len(meta_set)} duplicates)"
+            f"metadata has duplicate sequenced_id rows ({len(meta_samples) - len(meta_set)} duplicates)"
         )
     if only_in_parquet:
         preview = ", ".join(only_in_parquet[:5])
         more = "" if len(only_in_parquet) <= 5 else f", ... (+{len(only_in_parquet) - 5} more)"
-        report.issues.append(
-            f"{len(only_in_parquet)} sample(s) in parquet but missing from metadata: {preview}{more}"
-        )
+        report.issues.append(f"{len(only_in_parquet)} sample(s) in parquet but missing from metadata: {preview}{more}")
     if only_in_meta:
         preview = ", ".join(only_in_meta[:5])
         more = "" if len(only_in_meta) <= 5 else f", ... (+{len(only_in_meta) - 5} more)"
-        report.issues.append(
-            f"{len(only_in_meta)} sample(s) in metadata but missing from parquet: {preview}{more}"
-        )
+        report.issues.append(f"{len(only_in_meta)} sample(s) in metadata but missing from parquet: {preview}{more}")
 
     if not intersection:
         report.fatal = "no overlapping samples between metadata and parquet"
@@ -298,10 +288,7 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         dest="jobs",
         metavar="JOB",
-        help=(
-            "Limit to a specific release (job ID or job name). "
-            "May be repeated. Default: all accessible releases."
-        ),
+        help=("Limit to a specific release (job ID or job name). May be repeated. Default: all accessible releases."),
     )
     parser.add_argument(
         "-v",
@@ -332,10 +319,7 @@ def main(argv: list[str] | None = None) -> int:
     rows = datasets.to_dicts()
     if args.jobs:
         wanted = set(args.jobs)
-        rows = [
-            r for r in rows
-            if r.get("job_id") in wanted or r.get("job_name") in wanted
-        ]
+        rows = [r for r in rows if r.get("job_id") in wanted or r.get("job_name") in wanted]
         missing = wanted - {r.get("job_id") for r in rows} - {r.get("job_name") for r in rows}
         if missing:
             print(
