@@ -19,6 +19,16 @@ dependencies = [
     "tqdm>=4.60",
 ]
 
+[project.optional-dependencies]
+validate = [
+    "anndata>=0.10",
+    "numpy>=1.24",
+    "pandas>=2.0",
+]
+
+[project.scripts]
+test-vcpi-releases = "vcpi.test_releases:main"
+
 [dependency-groups]
 dev = [
     "pytest>=7.0",

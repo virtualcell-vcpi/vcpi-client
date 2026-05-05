@@ -335,6 +335,38 @@ Gene-level UMI counts obtained via rRNA removal (bbduk), STAR alignment against 
 
 ---
 
+## Validating every release end-to-end
+
+The package ships with a `test-vcpi-releases` console script that downloads every release the current `TVC_TOKEN` can access, checks that the sample IDs in the metadata table exactly match the sample columns in the wide-format parquet, and writes one [AnnData](https://anndata.readthedocs.io/) (`.h5ad`) per release.
+
+It depends on `anndata`, `numpy`, and `pandas`, so install with the `validate` extras:
+
+```bash
+pip install "vcpi[validate]"
+# or, from a clone:
+pip install -e ".[validate]"
+```
+
+Then:
+
+```bash
+# Validate every accessible release and write .h5ad files to ./vcpi-anndata
+test-vcpi-releases
+
+# Pick a specific output directory
+test-vcpi-releases --output-dir /path/to/out
+
+# Validate only — don't write .h5ad files
+test-vcpi-releases --no-write
+
+# Limit to specific releases (repeat --job for multiple)
+test-vcpi-releases --job vcpi-0001 --job vcpi-0002
+```
+
+Exit codes: `0` if every release is clean, `1` if any release had warnings (e.g. samples in metadata that aren't in the parquet, or vice versa), `2` if any release failed outright.
+
+---
+
 ## Troubleshooting
 
 **`PermissionError: TVC_TOKEN not found`** — Run `export TVC_TOKEN="your-token"` or call `vcpi.login()`.
