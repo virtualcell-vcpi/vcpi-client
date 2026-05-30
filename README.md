@@ -348,7 +348,9 @@ python examples/control_drug_pca.py \
 ```
 
 See [`docs/control_drug_pca_eda.md`](docs/control_drug_pca_eda.md) for an example interpretation of DMSO,
-Staurosporin, Brefeldin-A, Trichostatin-A, and Rigosertib control PCAs.
+Staurosporin, Brefeldin-A, Trichostatin-A, and Rigosertib control PCAs. See
+[`docs/drug_seq_project_notes.md`](docs/drug_seq_project_notes.md) for a team-facing summary of the dataset,
+QC findings, and modeling recommendations.
 
 ---
 
