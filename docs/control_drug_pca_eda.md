@@ -72,6 +72,18 @@ overlap an annotated gene or feature.
 The strongest pattern across the combined control PCAs is technical structure:
 plate and QC metrics explain substantial variation in the first PCs.
 
+### PCA Figures
+
+![DMSO PCA](figures/control_drug_pcas/dmso_full_pca.png)
+
+![Staurosporin PCA](figures/control_drug_pcas/staurosporin_full_pca.png)
+
+![Brefeldin-A PCA](figures/control_drug_pcas/brefeldin_a_full_pca.png)
+
+![Trichostatin-A PCA](figures/control_drug_pcas/trichostatin_a_full_pca.png)
+
+![Rigosertib PCA](figures/control_drug_pcas/rigosertib_full_pca.png)
+
 | Drug | PC1 variance | PC2 variance | Main PC1 drivers | Main PC2 drivers |
 | --- | ---: | ---: | --- | --- |
 | DMSO | 5.07% | 1.36% | `job_plate`, `unassigned_nofeatures`, `percent_duplicated`, `percent_mitochondrial`, `ngenes3` | `job_plate`, `percent_duplicated`, `ngenes3`, `percent_rrna_removed`, `percent_mapped` |

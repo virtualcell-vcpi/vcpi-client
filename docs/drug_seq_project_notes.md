@@ -120,6 +120,10 @@ We generated one PCA per control compound across three jobs:
 - Trichostatin-A
 - Rigosertib
 
+The rendered figures are included in
+[`docs/control_drug_pca_eda.md`](control_drug_pca_eda.md). The image files live
+under `docs/figures/control_drug_pcas/`.
+
 Before combining, duplicate checks found:
 
 - No overlapping `sequenced_id` values across the three metadata files.
