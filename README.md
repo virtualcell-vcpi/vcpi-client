@@ -353,7 +353,9 @@ Staurosporin, Brefeldin-A, Trichostatin-A, and Rigosertib control PCAs. See
 QC findings, and modeling recommendations. See [`docs/qnu_eval_split_pca.md`](docs/qnu_eval_split_pca.md)
 for a PCA of the selected `tvc-qnu-012` eval-like plates from the ridge-sweep validation setup. See
 [`docs/submission_prediction_pca.md`](docs/submission_prediction_pca.md) for a PCA of the
-`submission_qnu_rdkit_pca128_ridge_alpha1000.parquet` model predictions.
+`submission_qnu_rdkit_pca128_ridge_alpha1000.parquet` model predictions. See
+[`docs/train_test_expression_pca.md`](docs/train_test_expression_pca.md) for a PCA comparing observed train
+compound expression with predicted test compound expression.
 
 ---
 
