@@ -111,6 +111,43 @@ This matters for drug-response modeling. If expression responses are computed
 without plate-aware correction, the model can learn plate artifacts as if they
 were compound effects.
 
+## PCA After Regressing `ngenes3`
+
+To test whether gene-detection depth was driving the control PCAs, we repeated
+the PCA after regressing `ngenes3` out of every gene's log-normalized expression.
+This is a diagnostic correction, not a final recommended response-generation
+method by itself.
+
+![DMSO ngenes3-corrected PCA](figures/ngenes3_corrected_control_drug_pcas/dmso_ngenes3_corrected_pca.png)
+
+![Staurosporin ngenes3-corrected PCA](figures/ngenes3_corrected_control_drug_pcas/staurosporin_ngenes3_corrected_pca.png)
+
+![Brefeldin-A ngenes3-corrected PCA](figures/ngenes3_corrected_control_drug_pcas/brefeldin_a_ngenes3_corrected_pca.png)
+
+![Trichostatin-A ngenes3-corrected PCA](figures/ngenes3_corrected_control_drug_pcas/trichostatin_a_ngenes3_corrected_pca.png)
+
+![Rigosertib ngenes3-corrected PCA](figures/ngenes3_corrected_control_drug_pcas/rigosertib_ngenes3_corrected_pca.png)
+
+| Drug | PC1 variance after correction | PC2 variance after correction | PC1 correlation with `ngenes3` | Top remaining PC1 metric |
+| --- | ---: | ---: | ---: | --- |
+| DMSO | 3.80% | 1.18% | 0.00 | `percent_duplicated` |
+| Staurosporin | 1.84% | 1.23% | 0.00 | `percent_mapped` |
+| Brefeldin-A | 1.95% | 1.13% | 0.00 | `percent_duplicated` |
+| Trichostatin-A | 1.47% | 0.74% | 0.00 | `percent_mapped` |
+| Rigosertib | 2.30% | 1.41% | 0.00 | `percent_duplicated` |
+
+The largest change was Staurosporin. Before correction, Staurosporin PC1
+explained 26.52% of variance and correlated with `ngenes3` at 0.973. After
+regressing `ngenes3`, PC1 dropped to 1.84% and its `ngenes3` correlation was
+approximately zero. This strongly suggests that the original Staurosporin PC1
+was dominated by gene-detection depth rather than a biological control-drug
+response.
+
+After removing `ngenes3`, other technical metrics still explain residual
+structure, especially `percent_duplicated`, `percent_mapped`, and
+`percent_rrna_removed`. This means `ngenes3` correction helps, but does not
+remove all technical variation.
+
 Recommended preprocessing before modeling:
 
 1. Filter obvious low-quality wells using metrics such as `total_umi_count`,

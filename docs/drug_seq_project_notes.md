@@ -154,6 +154,13 @@ percent_rrna_removed correlation with PC1: -0.916
 
 This means Staurosporin control profiles vary strongly by plate and QC metrics.
 
+After regressing `ngenes3` out of each gene's log-normalized expression, the
+Staurosporin PC1 variance dropped from 26.52% to 1.84%, and the PC1 correlation
+with `ngenes3` went to approximately zero. This confirms that the original
+Staurosporin PC1 was mostly a gene-detection-depth axis. Residual PCs were still
+associated with other QC metrics such as `percent_duplicated`, `percent_mapped`,
+and `percent_rrna_removed`.
+
 ## What `container_id` Means
 
 `container_id` is the physical assay plate ID. Each `sequenced_id` is one well,
