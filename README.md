@@ -355,7 +355,9 @@ for a PCA of the selected `tvc-qnu-012` eval-like plates from the ridge-sweep va
 [`docs/submission_prediction_pca.md`](docs/submission_prediction_pca.md) for a PCA of the
 `submission_qnu_rdkit_pca128_ridge_alpha1000.parquet` model predictions. See
 [`docs/train_test_expression_pca.md`](docs/train_test_expression_pca.md) for a PCA comparing observed train
-compound expression with predicted test compound expression.
+compound expression with predicted test compound expression. See
+[`docs/morgan_jaccard_pruning.md`](docs/morgan_jaccard_pruning.md) for 2048-bit Morgan fingerprint pruning
+by train+test feature-column Jaccard distance.
 
 ---
 
