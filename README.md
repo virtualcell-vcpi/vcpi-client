@@ -335,6 +335,32 @@ Gene-level UMI counts obtained via rRNA removal (bbduk), STAR alignment against 
 
 ---
 
+## Example EDA Workflows
+
+The repository includes a control-drug PCA workflow for local QC analysis:
+
+```bash
+python examples/control_drug_pca.py \
+  --experiment tvc-bhr-009:/path/to/metadata-tvc-bhr-009.csv:/path/to/vcpi_tvc-bhr-009_counts.parquet \
+  --experiment tvc-kdl-010:/path/to/metadata-tvc-kdl-010.csv:/path/to/vcpi_tvc-kdl-010_counts.parquet \
+  --experiment tvc-qnu-012:/path/to/metadata-tvc-qnu-012.csv:/path/to/vcpi_tvc-qnu-012_counts.parquet \
+  --out-dir eda_outputs/full_control_drug_pcas
+```
+
+See [`docs/control_drug_pca_eda.md`](docs/control_drug_pca_eda.md) for an example interpretation of DMSO,
+Staurosporin, Brefeldin-A, Trichostatin-A, and Rigosertib control PCAs. See
+[`docs/drug_seq_project_notes.md`](docs/drug_seq_project_notes.md) for a team-facing summary of the dataset,
+QC findings, and modeling recommendations. See [`docs/qnu_eval_split_pca.md`](docs/qnu_eval_split_pca.md)
+for a PCA of the selected `tvc-qnu-012` eval-like plates from the ridge-sweep validation setup. See
+[`docs/submission_prediction_pca.md`](docs/submission_prediction_pca.md) for a PCA of the
+`submission_qnu_rdkit_pca128_ridge_alpha1000.parquet` model predictions. See
+[`docs/train_test_expression_pca.md`](docs/train_test_expression_pca.md) for a PCA comparing observed train
+compound expression with predicted test compound expression. See
+[`docs/morgan_jaccard_pruning.md`](docs/morgan_jaccard_pruning.md) for 2048-bit Morgan fingerprint pruning
+by train+test feature-column Jaccard distance.
+
+---
+
 ## Validating every release end-to-end
 
 The package ships with a `test-vcpi-releases` console script that downloads every release the current `TVC_TOKEN` can access, checks that the sample IDs in the metadata table exactly match the sample columns in the wide-format parquet, and writes one [AnnData](https://anndata.readthedocs.io/) (`.h5ad`) per release.
