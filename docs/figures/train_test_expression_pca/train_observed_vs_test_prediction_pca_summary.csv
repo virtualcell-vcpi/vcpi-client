@@ -1,0 +1,9 @@
+metric,value
+n_train_compounds,14026.0
+n_test_compounds,1064.0
+n_shared_genes,12995.0
+train_test_id_overlap,0.0
+pc1_variance,0.18319077789783478
+pc2_variance,0.047786645591259
+pc3_variance,0.03646128997206688
+pc12_centroid_distance,21.561641693115234

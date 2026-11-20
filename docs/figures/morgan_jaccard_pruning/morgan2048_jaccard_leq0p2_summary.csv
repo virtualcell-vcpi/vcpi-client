@@ -1,0 +1,15 @@
+metric,value
+train_compounds_valid,14026
+test_compounds_valid,1064
+invalid_smiles,0
+morgan_radius,2
+morgan_fp_size_started,2048
+nonzero_bits,2048
+zero_bits_dropped,0
+jaccard_distance_threshold,0.2
+grouping_method,greedy representative; removed bits must be within threshold of kept bit
+feature_groups,2038
+kept_bits,2038
+redundant_nonzero_bits_removed,10
+largest_group_size,4
+groups_with_more_than_one_feature,8
