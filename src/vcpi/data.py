@@ -61,6 +61,13 @@ TIMEOUT_DATASET = 60.0  # single-dataset URL resolution
 TIMEOUT_STREAM = 300.0  # full parquet download
 
 # ---------------------------------------------------------------------------
+# Count matrix layout
+# ---------------------------------------------------------------------------
+# Released parquets do not all store gene_id in the same position (first in
+# some releases, last in others). load_dataset() always returns it first.
+GENE_COLUMN = "gene_id"
+
+# ---------------------------------------------------------------------------
 # Shared empty chemistry schema — defined once, reused everywhere
 # All molecular properties computed via RDKit
 # ---------------------------------------------------------------------------
@@ -164,6 +171,14 @@ def _make_duckdb_con() -> duckdb.DuckDBPyConnection:
     return con
 
 
+def _gene_column_first(df: pl.DataFrame) -> pl.DataFrame:
+    """Move the gene_id column to position 0; other columns keep their order."""
+    if GENE_COLUMN not in df.columns or df.columns[0] == GENE_COLUMN:
+        return df
+    sample_columns = [c for c in df.columns if c != GENE_COLUMN]
+    return df.select([GENE_COLUMN, *sample_columns])
+
+
 def _safe_load_chem(job_id: str) -> pl.DataFrame:
     """
     Fault-tolerant wrapper around load_chem().
@@ -240,6 +255,7 @@ def load_dataset(job: str) -> pl.DataFrame:
     Returns
     -------
     pl.DataFrame
+        ``gene_id`` first, then one count column per sample (``sequenced_id``).
     """
     job_id = _resolve_job(job)
     data_url = resolve_dataset_url(job_id)
@@ -267,7 +283,7 @@ def load_dataset(job: str) -> pl.DataFrame:
                 progress.update(len(chunk))
 
     try:
-        return pl.read_parquet(tmp_path)
+        return _gene_column_first(pl.read_parquet(tmp_path))
     finally:
         os.unlink(tmp_path)
 
@@ -471,7 +487,10 @@ def query(
 
     def _run() -> None:
         try:
-            result.append(con.execute(sql).pl())
+            # con.sql() returns a relation; relation.pl() exists in DuckDB 1.x and 2.x.
+            # (DuckDB 2.0 removed .pl() from the connection returned by con.execute().)
+            relation = con.sql(sql)
+            result.append(relation.pl() if relation is not None else pl.DataFrame())
         except Exception as exc:
             error.append(exc)
 
