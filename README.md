@@ -1,6 +1,6 @@
 # vcpi — Virtual Cell Pharmacology Initiative Python Client
 
-A Python client for accessing VCPI sequencing datasets, compound chemistry, and experimental metadata. Built on [Polars](https://pola.rs) and [DuckDB](https://duckdb.org), it lets you run SQL directly against multi-experiment parquet files on S3 without downloading anything, or pull full datasets locally when you need them.
+A Python client for accessing VCPI sequencing datasets, compound chemistry, and experimental metadata. Built on [Polars](https://pola.rs) and [DuckDB](https://duckdb.org), it lets you run SQL over sample metadata and compound chemistry without downloading the count matrices, then download full experiments when you need expression data.
 
 ---
 
@@ -104,7 +104,7 @@ vcpi.login("my-token")  # direct
 
 ### `list_datasets()`
 
-Returns a Polars DataFrame of all datasets the authenticated user can access.
+Returns a Polars DataFrame of all datasets the authenticated user can access. Each release has a `job_id` (e.g. `tvc-bhr-009`) and a `job_name` (e.g. `vcpi-0001`); every function that takes `job` accepts either.
 ```python
 datasets = vcpi.list_datasets()
 datasets[["job_id", "job_name"]]
@@ -177,7 +177,7 @@ schemas["chemistry"]["column_name"].to_list()
 
 ### `load_dataset()`
 
-Download the raw sequencing parquet only. Prefer `load_experiment()` for most use cases.
+Download the raw sequencing parquet only. Prefer `load_experiment()` for most use cases. `gene_id` is always the first column, followed by one column per sample.
 ```python
 df = vcpi.load_dataset("vcpi-0001")
 ```
@@ -292,15 +292,20 @@ if (!combined[["fallback"]]) {
 
 ### Sequencing (`exp["data"]`)
 
-Wide-format gene expression matrix. Rows are Ensembl gene IDs (GENCODE v48), columns are sample IDs (`sequenced_id`).
+Wide-format matrix of integer UMI counts. Rows are genes, columns are samples.
+
+- `gene_id` is always the first column. Values are Ensembl gene IDs (GENCODE v48) plus 92 ERCC spike-in controls (`ERCC-00002`, …): 78,778 rows per release.
+- Every other column is one sample, named by its `sequenced_id` as a string. The column names match `metadata.sequenced_id` exactly.
+
+The parquet files themselves do not all store `gene_id` in the same position; `load_dataset()` and `load_experiment()` move it to the front. If you read a parquet file directly, find the column by name.
 ```
-shape: (~60,000 genes × ~N samples)
+shape: (78,778 genes × 1 + N samples)
 
 ┌─────────────────┬───────────┬───────────┬─────┐
 │ gene_id         │ 101160268 │ 101160269 │ … │
 ╞═════════════════╪═══════════╪═══════════╪═════╡
-│ ENSG00000223972 │ 0.0       │ 12.4      │ … │
-│ ENSG00000227232 │ 3.1       │ 0.0       │ … │
+│ ENSG00000223972 │ 0         │ 12        │ … │
+│ ENSG00000227232 │ 3         │ 0         │ … │
 └─────────────────┴───────────┴───────────┴─────┘
 ```
 
@@ -373,7 +378,11 @@ Exit codes: `0` if every release is clean, `1` if any release had warnings (e.g.
 
 **`401 Unauthorized`** — Token invalid or expired. Generate a new one at [thevirtualcell.com/dashboard](https://thevirtualcell.com/dashboard).
 
-**`load_experiment()` is slow** — The expression matrix is large (~400 MB). Typical download time is 20–60 seconds on a good connection.
+**`load_experiment()` is slow** — Each expression matrix is 0.7–1 GB. Expect about a minute per release on a good connection.
+
+**`AttributeError: ... has no attribute 'pl'`** — Your `vcpi` predates DuckDB 2 support. Upgrade: `pip install --upgrade git+https://github.com/virtualcell-vcpi/vcpi-client.git`.
+
+**`ValueError: No dataset found matching ...`** — The `job` value matches neither a `job_id` nor a `job_name` you can access. Check `vcpi.list_datasets()`.
 
 **`load_experiments()` returns `fallback: True`** — Combined data exceeded the 8 GB join limit. Individual frames are available via `result["data"][job_id]`.
 
@@ -384,7 +393,7 @@ Exit codes: `0` if every release is clean, `1` if any release had warnings (e.g.
 | Package | Purpose |
 | --- | --- |
 | `polars` | DataFrame engine |
-| `duckdb` | SQL engine with S3/parquet range-request support |
+| `duckdb` | SQL engine for `query()` and `describe()` |
 | `httpx` | HTTP client |
 | `keyring` | Secure token storage |
 | `tqdm` | Download progress bar |
