@@ -14,6 +14,7 @@ from vcpi.data import (
     SUPABASE_KEY,
     _clear_datasets_cache,
     _clear_token_cache,
+    _gene_column_first,
     _get_token,
     _headers,
     _resolve_job,
@@ -349,3 +350,47 @@ class TestResolveJob:
         _data._datasets_cache = [{"job_id": "stale", "job_name": None}]
         _clear_datasets_cache()
         assert _data._datasets_cache is None
+
+
+# ---------------------------------------------------------------------------
+# _gene_column_first
+# ---------------------------------------------------------------------------
+class TestGeneColumnFirst:
+    def test_moves_trailing_gene_id_to_front(self):
+        df = pl.DataFrame({"101": [1], "102": [2], "gene_id": ["ENSG00000141510"]})
+        assert _gene_column_first(df).columns == ["gene_id", "101", "102"]
+
+    def test_leaves_leading_gene_id_alone(self):
+        df = pl.DataFrame({"gene_id": ["ENSG00000141510"], "101": [1], "102": [2]})
+        assert _gene_column_first(df).columns == ["gene_id", "101", "102"]
+
+    def test_keeps_sample_order_and_values(self):
+        df = pl.DataFrame({"102": [2], "gene_id": ["ENSG00000141510"], "101": [1]})
+        out = _gene_column_first(df)
+        assert out.columns == ["gene_id", "102", "101"]
+        assert out.row(0) == ("ENSG00000141510", 2, 1)
+
+    def test_no_gene_id_column_unchanged(self):
+        df = pl.DataFrame({"a": [1], "b": [2]})
+        assert _gene_column_first(df).columns == ["a", "b"]
+
+
+class TestLoadDatasetColumnOrder:
+    @respx.mock
+    def test_load_dataset_returns_gene_id_first(self, set_token_env, tmp_path):
+        import io as _io
+
+        from vcpi.data import load_dataset
+
+        buf = _io.BytesIO()
+        pl.DataFrame({"1001": [5], "1002": [7], "gene_id": ["ENSG00000141510"]}).write_parquet(buf)
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/list-datasets").mock(
+            return_value=httpx.Response(200, json=SAMPLE_DATASETS_JSON)
+        )
+        respx.get(f"{SUPABASE_FUNCTIONS_URL}/get-dataset").mock(
+            return_value=httpx.Response(200, json=SAMPLE_GET_DATASET_JSON)
+        )
+        respx.get(SAMPLE_GET_DATASET_JSON["parquet_url"]).mock(return_value=httpx.Response(200, content=buf.getvalue()))
+
+        df = load_dataset("tvc-test-001")
+        assert df.columns == ["gene_id", "1001", "1002"]
